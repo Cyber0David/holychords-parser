@@ -351,7 +351,7 @@
 <footer>
   Локальный инструмент: ничего не уходит на сервер, весь разбор текста происходит в браузере.
   <br>Источник песен — <a href="https://holychords.pro" target="_blank" rel="noopener">holychords.pro</a>.
-  <br><span style="opacity:.6">build 2026-06-19.3 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
+  <br><span style="opacity:.6">build 2026-06-19.4 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
 </footer>
 
 <script>
@@ -440,8 +440,32 @@
     return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
   }
 
+  /* ---------------- URL auto-extraction ---------------- */
+  // People usually paste the whole copied block, link included, into the
+  // raw-text box rather than splitting it into the separate URL field by hand.
+  // Pull any URL out so it never ends up glued to the lyrics.
+  const URL_RE = /https?:\/\/[^\s\]\)]+/gi;
+
+  function extractUrl(raw){
+    const lines = raw.split(/\r\n?|\n/);
+    let foundUrl = '';
+    const kept = [];
+    for (const line of lines){
+      const matches = line.match(URL_RE);
+      if (matches && matches.length){
+        if (!foundUrl) foundUrl = matches[0].replace(/[.,;:!?]+$/, '');
+        const withoutUrls = line.replace(URL_RE, '').trim();
+        if (!withoutUrls) continue; // the whole line was just the link — drop it entirely
+        kept.push(line.replace(URL_RE, '').replace(/[ \t]{2,}/g, ' ').replace(/[ \t]+$/, ''));
+        continue;
+      }
+      kept.push(line);
+    }
+    return { text: kept.join('\n'), url: foundUrl };
+  }
+
   /* ---------------- block detection ---------------- */
-  const LABEL_RE = /^[\[\(]?\s*(куплет|припев|приспів|приспев|бридж|вступление|вступ|интро|аутро|кода|речитатив|verse|chorus|pre-?chorus|bridge|intro|outro|coda|tag)\.?\s*[\divxIVX]*\s*[:.\]\)]?\s*$/i;
+  const LABEL_RE = /^[\[\(]?\s*(?:[\divxIVX]+\s*[-.):]?\s*)?(куплет|припев|приспів|приспев|бридж|вступление|вступ|интро|аутро|кода|речитатив|verse|chorus|pre-?chorus|bridge|intro|outro|coda|tag)\.?\s*(?:[\divxIVX]+)?\s*[:.\]\)]?\s*$/i;
 
   function cleanLabel(raw){
     return raw.trim().replace(/^[\[\(]\s*/, '').replace(/\s*[\]\)]\s*$/, '').replace(/[:.]\s*$/, '').trim();
@@ -669,9 +693,13 @@
     if (!raw.trim()){ toast('Сначала вставьте текст песни'); return; }
 
     state.title = $('#titleInput').value.trim();
-    state.url = $('#urlInput').value.trim();
 
-    const cleaned = stripChords(raw);
+    const { text: withoutUrl, url: detectedUrl } = extractUrl(raw);
+    const manualUrl = $('#urlInput').value.trim();
+    state.url = manualUrl || detectedUrl;
+    if (!manualUrl && detectedUrl){ $('#urlInput').value = detectedUrl; }
+
+    const cleaned = stripChords(withoutUrl);
     state.blocks = splitIntoBlocks(cleaned);
 
     $('#step-blocks').classList.remove('hidden');
