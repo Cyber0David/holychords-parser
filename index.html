@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Songboard — слова песен для Holyrics</title>
 <meta name="description" content="Готовит тексты песен с holychords.pro для показа в Holyrics: ищите песню, вставьте текст со страницы, уберите аккорды, переставьте куплеты и скопируйте или скачайте результат.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%237E5814'/%3E%3Ctext x='32' y='43' font-family='Georgia,serif' font-size='34' font-weight='700' fill='%23FBF4E2' text-anchor='middle'%3E%E2%99%AA%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -157,6 +158,12 @@
   .block{
     background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
     box-shadow:var(--shadow); padding:16px 16px 14px;
+    transition:border-color .15s, box-shadow .15s, transform .15s;
+  }
+  .block:hover{transform:translateY(-1px);}
+  .block:focus-within{
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(168,118,31,0.14), var(--shadow);
   }
   .block-top{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
   .block-label-input{
@@ -291,8 +298,9 @@
       <div id="blocks"></div>
       <div class="actions">
         <button class="btn-ghost add-block" id="addBlockBtn">+ Добавить блок</button>
-        <button class="btn-ghost" id="chorusAfterBtn" title="Вставить копию припева после каждого куплета и бриджа (кроме блока end)">⤵ Припев после куплетов</button>
+        <button class="btn-ghost" id="addChorusAfterBtn">🔁 Добавить припев после блоков</button>
       </div>
+      <p class="hint">«Добавить припев после блоков» вставит копию припева после каждого куплета, бриджа и т.п. — кроме самого припева и блока «end».</p>
     </div>
   </section>
 
@@ -306,12 +314,13 @@
       </div>
     </div>
     <div class="step-body">
+      <p class="hint" style="margin:0 0 14px;">По умолчанию остаются только слова песни — включайте галочки, если нужно добавить что-то ещё.</p>
       <label class="toggle-row">
-        <input type="checkbox" id="showTitleToggle" checked>
-        Показывать название песни в начале текста
+        <input type="checkbox" id="showTitleToggle">
+        Добавить название песни в начало текста
       </label>
       <label class="toggle-row">
-        <input type="checkbox" id="showLabelsToggle" checked>
+        <input type="checkbox" id="showLabelsToggle">
         Показывать названия блоков (Куплет 1, Припев…) в тексте
       </label>
       <label class="toggle-row">
@@ -322,21 +331,15 @@
       <div class="actions">
         <button class="btn-primary" id="copyBtn">Скопировать текст</button>
         <button class="btn-ghost" id="downloadBtn">Скачать .txt для Holyrics</button>
-        <button class="btn-ghost" id="downloadJsonBtn">Скачать .json (Holyrics)</button>
         <button class="btn-ghost" id="copyLinkBtn">Скопировать только ссылку</button>
       </div>
       <div class="note">
-        <b>Про форматы экспорта:</b>
-        <b>.json</b> — официальный формат песни Holyrics (по схеме публичного API): откройте
-        Файл → Настройки → API-сервер, включите его и отправьте объект через действие <b>CreateSong</b>,
-        либо импортируйте файл вручную. Один блок текста = один слайд.
-        <b>.txt</b> — самый простой путь: откройте в Holyrics редактор песни
+        <b>Про формат .mufl:</b> это закрытый бинарный формат Holyrics без открытой документации полей,
+        поэтому надёжно собрать именно его «вслепую» нельзя — неправильный файл Holyrics просто не примет.
+        Текстовый файл выше — самый надёжный путь: откройте в Holyrics редактор песни
         (Песня → Добавить/Редактировать) и вставьте текст, пустая строка между блоками станет границей слайда.
-        <br><br>
-        <b>Про .mufl:</b> я разобрал присланный образец — это полностью зашифрованный бинарный файл
-        (нет ни заголовка, ни читаемых строк), поэтому собрать его «вслепую» надёжно нельзя:
-        Holyrics просто откажется принимать неправильный файл. Поэтому прямой экспорт в .mufl не делается —
-        .json и .txt выше покрывают все рабочие способы добавления песни.
+        Если пришлёте мне реальный экспортированный .mufl-файл из своей версии Holyrics, я смогу разобрать
+        его точную структуру и сделать прямой экспорт.
       </div>
     </div>
   </section>
@@ -472,41 +475,6 @@
       .map(b => ({ id: newId(), label: b.label, text: b.text }));
   }
 
-  /* ---------------- label classification ---------------- */
-  // Match a keyword anywhere in a label (with optional surrounding brackets/dots/colons/numbers).
-  function labelHas(b, re){
-    return re.test((b && b.label || '').trim().toLowerCase());
-  }
-  const CHORUS_RE    = /припев|приспів|приспев|chorus/;
-  const VERSE_RE     = /куплет|verse/;
-  const BRIDGE_RE    = /бридж|bridge/;
-  const END_RE       = /(^|\s)(end|конец|финал|outro|аутро|кода|coda)(\s|$)/;
-
-  const isChorusBlock  = b => labelHas(b, CHORUS_RE);
-  const isEndBlock     = b => labelHas(b, END_RE);
-  // Triggers the chorus insertion: verse or bridge (per the chosen rule), never the chorus itself.
-  const isTriggerBlock = b => !isChorusBlock(b) && (labelHas(b, VERSE_RE) || labelHas(b, BRIDGE_RE));
-
-  function insertChorusAfterTriggers(){
-    const chorusSrc = state.blocks.find(isChorusBlock);
-    if (!chorusSrc){ toast('Нет блока припева для дублирования'); return; }
-    if (!chorusSrc.text.trim()){ toast('Блок припева пустой'); return; }
-
-    const result = [];
-    let inserted = 0;
-    for (const b of state.blocks){
-      result.push(b);
-      if (isTriggerBlock(b) && !isEndBlock(b)){
-        result.push({ id: newId(), label: 'Припев', text: chorusSrc.text });
-        inserted++;
-      }
-    }
-    if (inserted === 0){ toast('Куплетов и бриджей не найдено'); return; }
-    state.blocks = result;
-    renderBlocks(); renderPreview();
-    toast('Припев добавлен после ' + inserted + ' блок(ов)');
-  }
-
   /* ---------------- rendering: blocks ---------------- */
   const blocksEl = $('#blocks');
 
@@ -627,6 +595,33 @@
     renderBlocks(); renderPreview();
   }
 
+  /* ---------------- auto-insert chorus after other blocks ---------------- */
+  const CHORUS_LABEL_RE = /^(припев|приспів|приспев|chorus)(?![a-zа-яёіїєґ])/i;
+  const END_LABEL_RE = /^(end|конец|outro|аутро|финал|кода|coda)(?![a-zа-яёіїєґ])/i;
+
+  function isChorusLabel(label){ return CHORUS_LABEL_RE.test((label || '').trim()); }
+  function isEndLabel(label){ return END_LABEL_RE.test((label || '').trim()); }
+
+  function insertChorusAfterBlocks(){
+    const chorus = state.blocks.find(b => isChorusLabel(b.label));
+    if (!chorus){ toast('Не нашёл блок «Припев» — переименуйте нужный блок, чтобы я его узнал'); return; }
+
+    const result = [];
+    for (let i = 0; i < state.blocks.length; i++){
+      const b = state.blocks[i];
+      result.push(b);
+      const isChorus = isChorusLabel(b.label);
+      const isEnd = isEndLabel(b.label);
+      const nextIsChorus = (i + 1 < state.blocks.length) && isChorusLabel(state.blocks[i + 1].label);
+      if (!isChorus && !isEnd && !nextIsChorus){
+        result.push({ id: newId(), label: chorus.label, text: chorus.text });
+      }
+    }
+    state.blocks = result;
+    renderBlocks(); renderPreview();
+    toast('Припев добавлен после куплетов и других блоков');
+  }
+
   /* ---------------- preview / export ---------------- */
   const previewBox = $('#previewBox');
   const showTitleToggle = $('#showTitleToggle');
@@ -647,31 +642,6 @@
       out += '\n\n' + state.url;
     }
     return out;
-  }
-
-  // Build a Holyrics song JSON (public API "Lyrics"/CreateSong shape).
-  // One block = one slide; the slide "text" follows the Holyrics convention of
-  // separating individual lines with "---" so each becomes its own slide screen.
-  function assembleHolyricsJSON(){
-    const showLabels = showLabelsToggle.checked;
-    const slides = [];
-    for (const b of state.blocks){
-      const text = b.text.trim();
-      if (!text) continue;
-      // label goes in as the first line when requested
-      const body = (showLabels && b.label ? b.label + '\n' : '') + text;
-      // Holyrics splits a slide's text on "---"; multi-line block kept as one slide
-      slides.push({ text: body });
-    }
-    const obj = {
-      title:  state.title.trim() || 'Без названия',
-      artist: '',
-      slides: slides
-    };
-    if (includeUrlToggle.checked && state.url){
-      obj.source_url = state.url;
-    }
-    return JSON.stringify(obj, null, 2);
   }
 
   function renderPreview(){
@@ -733,7 +703,7 @@
     renderBlocks(); renderPreview(); syncExportVisibility();
   });
 
-  $('#chorusAfterBtn').addEventListener('click', insertChorusAfterTriggers);
+  $('#addChorusAfterBtn').addEventListener('click', insertChorusAfterBlocks);
 
   /* ---------------- step 4: export actions ---------------- */
   showTitleToggle.addEventListener('change', renderPreview);
@@ -749,12 +719,6 @@
     const name = sanitizeFilename(state.title) + '.txt';
     downloadTextFile(name, assembleText());
     toast('Файл скачан: ' + name);
-  });
-
-  $('#downloadJsonBtn').addEventListener('click', () => {
-    const name = sanitizeFilename(state.title) + '.json';
-    downloadTextFile(name, assembleHolyricsJSON());
-    toast('JSON-файл скачан: ' + name);
   });
 
   $('#copyLinkBtn').addEventListener('click', async () => {
