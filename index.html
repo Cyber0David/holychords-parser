@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Songboard — слова песен для Holyrics</title>
+<meta name="description" content="Готовит тексты песен с holychords.pro для показа в Holyrics: ищите песню, вставьте текст со страницы, уберите аккорды, переставьте куплеты и скопируйте или скачайте результат.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F3EEE3;
+    --paper-deep:#EAE1CC;
+    --card:#FAF6EC;
+    --ink:#241F16;
+    --ink-soft:#5B5343;
+    --line:#DCD0AE;
+    --line-soft:#E7DEC4;
+    --accent:#A8761F;
+    --accent-deep:#7E5814;
+    --accent-ink:#3B2A0C;
+    --danger:#8C3A2E;
+    --danger-deep:#6E2C22;
+    --mono-bg:#FCFAF2;
+    --good:#3F6B45;
+    --shadow: 0 1px 0 rgba(36,31,22,0.05), 0 8px 24px -16px rgba(36,31,22,0.35);
+    --radius: 14px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(900px 500px at 90% -10%, rgba(168,118,31,0.10), transparent 60%),
+      var(--paper);
+    color:var(--ink);
+    font-family:'Inter', system-ui, sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent-deep);}
+  .wrap{max-width:920px;margin:0 auto;padding:0 20px 96px;}
+
+  /* ---------- header ---------- */
+  header.top{
+    padding:56px 20px 36px;
+    border-bottom:1px solid var(--line);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 40%);
+    position:relative;
+    overflow:hidden;
+  }
+  header.top::before{
+    content:"";
+    position:absolute; inset:0;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(36,31,22,0.035) 0 1px, transparent 1px 28px);
+    pointer-events:none;
+  }
+  .top-inner{max-width:920px;margin:0 auto;position:relative;}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;
+    font:600 12px/1 'Inter';letter-spacing:.12em;text-transform:uppercase;
+    color:var(--accent-deep);
+    margin-bottom:14px;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);}
+  h1{
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    font-size:clamp(32px, 5vw, 46px);
+    line-height:1.05;
+    margin:0 0 14px;
+    letter-spacing:-0.01em;
+  }
+  h1 em{font-style:italic;font-weight:500;color:var(--accent-deep);}
+  .lede{
+    font-size:16px;color:var(--ink-soft);max-width:62ch;margin:0 0 18px;
+  }
+  .top-links{font-size:14px;color:var(--ink-soft);}
+  .top-links a{font-weight:600;}
+
+  /* ---------- step layout ---------- */
+  section.step{padding:48px 0;border-bottom:1px solid var(--line-soft);}
+  section.step:last-of-type{border-bottom:none;}
+  .step-head{display:flex;gap:16px;align-items:flex-start;margin-bottom:20px;}
+  .tile{
+    flex:0 0 auto;
+    width:46px;height:46px;
+    border-radius:9px;
+    background:linear-gradient(155deg, #C99A3F, var(--accent) 55%, var(--accent-deep));
+    border:1px solid var(--accent-deep);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -6px 10px rgba(0,0,0,0.18), 0 6px 14px -8px rgba(126,88,20,0.6);
+    color:#fff8e8;
+    font-family:'Fraunces', serif; font-weight:600; font-size:20px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .step-head h2{
+    font-family:'Fraunces', serif;font-weight:600;font-size:23px;margin:2px 0 4px;
+  }
+  .step-head p{margin:0;color:var(--ink-soft);font-size:14.5px;max-width:60ch;}
+  .step-body{margin-left:62px;}
+  @media (max-width:600px){ .step-body{margin-left:0;} }
+
+  /* ---------- inputs ---------- */
+  label.field-label{
+    display:block;font:600 12.5px/1 'Inter';letter-spacing:.03em;color:var(--accent-deep);
+    margin:0 0 7px;text-transform:uppercase;
+  }
+  input[type=text], input[type=url]{
+    width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;
+    background:var(--card);color:var(--ink);font:500 15px/1.4 'Inter';
+    outline:none;transition:border-color .15s, box-shadow .15s;
+  }
+  input[type=text]:focus, input[type=url]:focus, textarea:focus{
+    border-color:var(--accent); box-shadow:0 0 0 3px rgba(168,118,31,0.16);
+  }
+  textarea{
+    width:100%;resize:vertical;border:1px solid var(--line);border-radius:10px;
+    background:var(--mono-bg);color:var(--ink);
+    font:14.5px/1.65 'IBM Plex Mono', monospace;
+    padding:14px;outline:none;transition:border-color .15s, box-shadow .15s;
+  }
+  .row{display:flex;gap:12px;flex-wrap:wrap;}
+  .row > *{flex:1 1 220px;}
+  .field{margin-bottom:16px;}
+  .hint{font-size:12.5px;color:var(--ink-soft);margin-top:6px;}
+
+  /* ---------- buttons ---------- */
+  button{font-family:'Inter';cursor:pointer;border-radius:9px;border:1px solid transparent;
+    font-weight:600;font-size:14px;padding:11px 18px;transition:transform .08s, filter .15s, background .15s;}
+  button:active{transform:translateY(1px);}
+  .btn-primary{
+    background:linear-gradient(155deg,#C99A3F, var(--accent) 60%, var(--accent-deep));
+    color:#fff8e8;border-color:var(--accent-deep);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 8px 16px -10px rgba(126,88,20,0.7);
+  }
+  .btn-primary:hover{filter:brightness(1.04);}
+  .btn-primary:disabled{filter:grayscale(0.3) brightness(0.92);opacity:.6;cursor:not-allowed;}
+  .btn-ghost{
+    background:var(--card);color:var(--ink);border-color:var(--line);
+  }
+  .btn-ghost:hover{border-color:var(--accent);color:var(--accent-deep);}
+  .btn-danger{background:var(--card);color:var(--danger-deep);border-color:#E3CBC3;}
+  .btn-danger:hover{background:#F7EAE6;border-color:var(--danger);}
+  .btn-sm{padding:6px 10px;font-size:12.5px;border-radius:7px;}
+  .btn-icon{padding:6px 9px;font-size:13px;line-height:1;}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;}
+
+  /* ---------- search ---------- */
+  .search-row{display:flex;gap:10px;}
+  .search-row input{flex:1;}
+
+  /* ---------- blocks ---------- */
+  #blocks{display:flex;flex-direction:column;gap:14px;}
+  .block{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:16px 16px 14px;
+  }
+  .block-top{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+  .block-label-input{
+    flex:1 1 180px;font:600 14px 'Inter';padding:8px 10px;border:1px solid var(--line);
+    border-radius:8px;background:var(--paper);color:var(--accent-ink);
+  }
+  .block-label-input:focus{outline:none;border-color:var(--accent);}
+  .block-controls{display:flex;gap:6px;flex-wrap:wrap;}
+  .block textarea{min-height:96px;}
+  .block-empty{
+    text-align:center;color:var(--ink-soft);padding:30px 10px;border:1px dashed var(--line);
+    border-radius:var(--radius);font-size:14px;
+  }
+  .add-block{align-self:flex-start;}
+
+  /* ---------- preview ---------- */
+  #previewBox{
+    background:var(--mono-bg);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px 22px;white-space:pre-wrap;font:14.5px/1.7 'IBM Plex Mono', monospace;
+    color:var(--ink); max-height:480px; overflow:auto;
+  }
+  .toggle-row{display:flex;align-items:center;gap:9px;margin:4px 0 16px;font-size:13.5px;color:var(--ink-soft);}
+  .toggle-row input{accent-color:var(--accent);}
+
+  .toast{
+    position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(12px);
+    background:var(--ink);color:#FBF4E2;padding:11px 18px;border-radius:10px;
+    font:600 13.5px 'Inter';opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;
+    box-shadow:0 10px 30px -10px rgba(0,0,0,0.5); z-index:50;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  .note{
+    font-size:13px;color:var(--ink-soft);background:var(--paper-deep);
+    border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-top:14px;
+  }
+  .note b{color:var(--accent-ink);}
+
+  footer{
+    text-align:center;color:var(--ink-soft);font-size:13px;padding:36px 20px 10px;
+  }
+  footer a{color:var(--ink-soft);}
+
+  .hidden{display:none !important;}
+
+  ::selection{background:rgba(168,118,31,0.28);}
+  :focus-visible{outline:2px solid var(--accent-deep);outline-offset:2px;}
+
+  @media (prefers-reduced-motion: reduce){
+    html{scroll-behavior:auto;}
+    *{transition:none !important;}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="eyebrow"><span class="dot"></span>Рабочий стол для текстов песен</div>
+    <h1>Слова песен, <em>готовые к показу</em></h1>
+    <p class="lede">
+      Найдите песню на holychords.pro, вставьте текст со страницы — инструмент уберёт аккорды,
+      разложит куплеты и припевы по блокам, которые можно переставлять и редактировать,
+      а затем скопирует или скачает чистый текст для Holyrics.
+    </p>
+    <div class="top-links">Источник песен: <a href="https://holychords.pro" target="_blank" rel="noopener">holychords.pro</a> — каждая песня сохраняет ссылку на оригинал.</div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- STEP 1: SEARCH -->
+  <section class="step" id="step-search">
+    <div class="step-head">
+      <div class="tile">1</div>
+      <div>
+        <h2>Найдите песню</h2>
+        <p>Поиск открывает результаты прямо на holychords.pro в новой вкладке — там удобнее всего выбрать нужную версию песни.</p>
+      </div>
+    </div>
+    <div class="step-body">
+      <div class="search-row">
+        <input type="text" id="searchInput" placeholder="Название песни или исполнитель…" autocomplete="off">
+        <button class="btn-primary" id="searchBtn">Искать на holychords.pro</button>
+      </div>
+      <p class="hint">Откроется holychords.pro/search — скопируйте оттуда текст нужной песни и ссылку на неё, затем вернитесь сюда.</p>
+    </div>
+  </section>
+
+  <!-- STEP 2: PASTE -->
+  <section class="step" id="step-paste">
+    <div class="step-head">
+      <div class="tile">2</div>
+      <div>
+        <h2>Вставьте текст песни</h2>
+        <p>Скопируйте текст со страницы песни (с аккордами — это нормально) и вставьте сюда вместе со ссылкой на источник.</p>
+      </div>
+    </div>
+    <div class="step-body">
+      <div class="row">
+        <div class="field">
+          <label class="field-label" for="titleInput">Название песни</label>
+          <input type="text" id="titleInput" placeholder="Например: Только Ты">
+        </div>
+        <div class="field">
+          <label class="field-label" for="urlInput">Ссылка на песню (holychords.pro)</label>
+          <input type="url" id="urlInput" placeholder="https://holychords.pro/…">
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label" for="rawInput">Текст со страницы (с аккордами)</label>
+        <textarea id="rawInput" rows="10" placeholder="Вставьте сюда скопированный текст песни — вместе с аккордами, инструмент уберёт их автоматически."></textarea>
+      </div>
+      <div class="actions">
+        <button class="btn-primary" id="processBtn">Убрать аккорды и разложить по блокам</button>
+        <button class="btn-ghost" id="clearBtn">Очистить</button>
+      </div>
+      <p class="hint" id="copyUrlHint"></p>
+    </div>
+  </section>
+
+  <!-- STEP 3: BLOCKS -->
+  <section class="step hidden" id="step-blocks">
+    <div class="step-head">
+      <div class="tile">3</div>
+      <div>
+        <h2>Соберите песню</h2>
+        <p>Переставляйте блоки местами, объединяйте, разбивайте по месту курсора, переименовывайте или удаляйте лишнее.</p>
+      </div>
+    </div>
+    <div class="step-body">
+      <div id="blocks"></div>
+      <div class="actions">
+        <button class="btn-ghost add-block" id="addBlockBtn">+ Добавить блок</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 4: EXPORT -->
+  <section class="step hidden" id="step-export">
+    <div class="step-head">
+      <div class="tile">4</div>
+      <div>
+        <h2>Скопируйте или скачайте</h2>
+        <p>Готовый текст — для буфера обмена или файла, который можно вставить в редактор песни в Holyrics.</p>
+      </div>
+    </div>
+    <div class="step-body">
+      <label class="toggle-row">
+        <input type="checkbox" id="showLabelsToggle" checked>
+        Показывать названия блоков (Куплет 1, Припев…) в тексте
+      </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="includeUrlToggle">
+        Добавить ссылку на источник в конец текста
+      </label>
+      <div id="previewBox"></div>
+      <div class="actions">
+        <button class="btn-primary" id="copyBtn">Скопировать текст</button>
+        <button class="btn-ghost" id="downloadBtn">Скачать .txt для Holyrics</button>
+        <button class="btn-ghost" id="copyLinkBtn">Скопировать только ссылку</button>
+      </div>
+      <div class="note">
+        <b>Про формат .mufl:</b> это закрытый бинарный формат Holyrics без открытой документации полей,
+        поэтому надёжно собрать именно его «вслепую» нельзя — неправильный файл Holyrics просто не примет.
+        Текстовый файл выше — самый надёжный путь: откройте в Holyrics редактор песни
+        (Песня → Добавить/Редактировать) и вставьте текст, пустая строка между блоками станет границей слайда.
+        Если пришлёте мне реальный экспортированный .mufl-файл из своей версии Holyrics, я смогу разобрать
+        его точную структуру и сделать прямой экспорт.
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<footer>
+  Локальный инструмент: ничего не уходит на сервер, весь разбор текста происходит в браузере.
+  <br>Источник песен — <a href="https://holychords.pro" target="_blank" rel="noopener">holychords.pro</a>.
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------------- state ---------------- */
+  const state = {
+    title: '',
+    url: '',
+    blocks: [] // {id, label, text}
+  };
+  let idSeq = 1;
+  const newId = () => 'blk_' + (idSeq++);
+
+  /* ---------------- helpers ---------------- */
+  const $ = sel => document.querySelector(sel);
+  const toastEl = $('#toast');
+  let toastTimer = null;
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=> toastEl.classList.remove('show'), 2200);
+  }
+
+  async function copyText(text){
+    try{
+      await navigator.clipboard.writeText(text);
+      return true;
+    }catch(e){
+      // Fallback for older browsers / non-secure contexts
+      try{
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        return true;
+      }catch(e2){
+        return false;
+      }
+    }
+  }
+
+  function downloadTextFile(filename, text){
+    const blob = new Blob([text], {type:'text/plain;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=> URL.revokeObjectURL(url), 4000);
+  }
+
+  function sanitizeFilename(name){
+    return (name || 'pesnya').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g,' ').trim().slice(0,80) || 'pesnya';
+  }
+
+  /* ---------------- chord stripping ---------------- */
+  // Roots A-H (Slavic notation uses H for B, B for B-flat), with quality/extension/bass.
+  const CHORD_TOKEN_RE = /^[A-H](#|b|♯|♭)?(maj|min|dim|aug|sus|add)?m?[0-9]*(\/[A-H](#|b|♯|♭)?(maj|min|dim|aug|sus|add)?m?[0-9]*)?[.,;:]?$/i;
+  const CYRILLIC_RE = /[А-Яа-яЁёІіЇїЄєҐґ]/;
+
+  function isChordLine(line){
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+    if (CYRILLIC_RE.test(trimmed)) return false;
+    const tokens = trimmed.split(/\s+/);
+    if (!tokens.length) return false;
+    return tokens.every(tok => tok === '|' || tok === '-' || tok === '–' || CHORD_TOKEN_RE.test(tok));
+  }
+
+  function stripChords(raw){
+    let text = raw.replace(/\r\n?/g, '\n');
+    // inline ChordPro-style [Am] notation
+    text = text.replace(/\[[A-H][^\]\n]{0,14}\]/g, '');
+    const lines = text.split('\n');
+    const kept = [];
+    for (const line of lines){
+      if (isChordLine(line)) continue;
+      kept.push(line.replace(/[ \t]{2,}/g, ' ').replace(/[ \t]+$/, ''));
+    }
+    return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  /* ---------------- block detection ---------------- */
+  const LABEL_RE = /^[\[\(]?\s*(куплет|припев|приспів|приспев|бридж|вступление|вступ|интро|аутро|кода|речитатив|verse|chorus|pre-?chorus|bridge|intro|outro|coda|tag)\.?\s*[\divxIVX]*\s*[:.\]\)]?\s*$/i;
+
+  function cleanLabel(raw){
+    return raw.trim().replace(/^[\[\(]\s*/, '').replace(/\s*[\]\)]\s*$/, '').replace(/[:.]\s*$/, '').trim();
+  }
+
+  function splitIntoBlocks(text){
+    const lines = text.split('\n');
+    const hasLabels = lines.some(l => LABEL_RE.test(l.trim()));
+    let raw = [];
+
+    if (hasLabels){
+      let current = null;
+      for (const line of lines){
+        const trimmed = line.trim();
+        if (LABEL_RE.test(trimmed)){
+          if (current) raw.push(current);
+          current = { label: cleanLabel(trimmed), text: '' };
+        } else {
+          if (!current) current = { label: 'Блок 1', text: '' };
+          current.text += (current.text ? '\n' : '') + line;
+        }
+      }
+      if (current) raw.push(current);
+    } else {
+      const chunks = text.split(/\n{2,}/);
+      raw = chunks.map((c, i) => ({ label: 'Блок ' + (i+1), text: c }));
+    }
+
+    return raw
+      .map(b => ({ label: b.label, text: b.text.trim() }))
+      .filter(b => b.text.length > 0)
+      .map(b => ({ id: newId(), label: b.label, text: b.text }));
+  }
+
+  /* ---------------- rendering: blocks ---------------- */
+  const blocksEl = $('#blocks');
+
+  function autosize(ta){
+    ta.style.height = 'auto';
+    ta.style.height = (ta.scrollHeight + 2) + 'px';
+  }
+
+  function renderBlocks(){
+    blocksEl.innerHTML = '';
+    if (!state.blocks.length){
+      const empty = document.createElement('div');
+      empty.className = 'block-empty';
+      empty.textContent = 'Блоков пока нет — вставьте текст песни выше и нажмите «Убрать аккорды».';
+      blocksEl.appendChild(empty);
+      return;
+    }
+    state.blocks.forEach((block, idx) => {
+      const card = document.createElement('div');
+      card.className = 'block';
+      card.dataset.id = block.id;
+
+      const top = document.createElement('div');
+      top.className = 'block-top';
+
+      const labelInput = document.createElement('input');
+      labelInput.type = 'text';
+      labelInput.className = 'block-label-input';
+      labelInput.value = block.label;
+      labelInput.addEventListener('input', () => {
+        block.label = labelInput.value;
+        renderPreview();
+      });
+
+      const controls = document.createElement('div');
+      controls.className = 'block-controls';
+
+      const upBtn = mkBtn('↑', 'btn-ghost btn-icon', 'Переместить вверх', () => moveBlock(idx, -1));
+      const downBtn = mkBtn('↓', 'btn-ghost btn-icon', 'Переместить вниз', () => moveBlock(idx, 1));
+      const splitBtn = mkBtn('✂ Разделить', 'btn-ghost btn-sm', 'Разделить по позиции курсора', () => splitBlock(idx));
+      const mergeBtn = mkBtn('⤓ Объединить', 'btn-ghost btn-sm', 'Объединить со следующим блоком', () => mergeBlock(idx));
+      const dupBtn = mkBtn('⧉', 'btn-ghost btn-icon', 'Дублировать блок', () => duplicateBlock(idx));
+      const delBtn = mkBtn('🗑', 'btn-danger btn-icon', 'Удалить блок', () => deleteBlock(idx));
+
+      if (idx === 0) upBtn.disabled = true;
+      if (idx === state.blocks.length - 1){ downBtn.disabled = true; mergeBtn.disabled = true; }
+
+      controls.append(upBtn, downBtn, splitBtn, mergeBtn, dupBtn, delBtn);
+      top.append(labelInput, controls);
+
+      const ta = document.createElement('textarea');
+      ta.value = block.text;
+      ta.spellcheck = false;
+      ta.addEventListener('input', () => {
+        block.text = ta.value;
+        autosize(ta);
+        renderPreview();
+      });
+
+      card.append(top, ta);
+      blocksEl.appendChild(card);
+      requestAnimationFrame(() => autosize(ta));
+    });
+  }
+
+  function mkBtn(label, cls, title, onClick){
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = cls;
+    b.textContent = label;
+    b.title = title;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function moveBlock(idx, dir){
+    const j = idx + dir;
+    if (j < 0 || j >= state.blocks.length) return;
+    const [b] = state.blocks.splice(idx, 1);
+    state.blocks.splice(j, 0, b);
+    renderBlocks(); renderPreview();
+  }
+
+  function deleteBlock(idx){
+    state.blocks.splice(idx, 1);
+    renderBlocks(); renderPreview();
+    syncExportVisibility();
+  }
+
+  function duplicateBlock(idx){
+    const src = state.blocks[idx];
+    state.blocks.splice(idx + 1, 0, { id: newId(), label: src.label + ' (копия)', text: src.text });
+    renderBlocks(); renderPreview();
+  }
+
+  function mergeBlock(idx){
+    if (idx >= state.blocks.length - 1) return;
+    const a = state.blocks[idx], b = state.blocks[idx+1];
+    a.text = a.text + '\n' + b.text;
+    state.blocks.splice(idx+1, 1);
+    renderBlocks(); renderPreview();
+  }
+
+  function splitBlock(idx){
+    const card = blocksEl.children[idx];
+    const ta = card ? card.querySelector('textarea') : null;
+    const block = state.blocks[idx];
+    let pos = block.text.length;
+    if (ta && document.activeElement === ta) pos = ta.selectionStart;
+    else if (ta) pos = ta.selectionStart || Math.floor(block.text.length / 2);
+
+    const before = block.text.slice(0, pos).replace(/\n+$/,'');
+    const after = block.text.slice(pos).replace(/^\n+/,'');
+    if (!before || !after){ toast('Поставьте курсор внутри текста блока, чтобы разделить его в этом месте'); return; }
+
+    block.text = before;
+    state.blocks.splice(idx + 1, 0, { id: newId(), label: block.label + ' (б)', text: after });
+    renderBlocks(); renderPreview();
+  }
+
+  /* ---------------- preview / export ---------------- */
+  const previewBox = $('#previewBox');
+  const showLabelsToggle = $('#showLabelsToggle');
+  const includeUrlToggle = $('#includeUrlToggle');
+
+  function assembleText(){
+    const showLabels = showLabelsToggle.checked;
+    const parts = [];
+    if (state.title) parts.push(state.title.trim());
+    for (const b of state.blocks){
+      if (!b.text.trim()) continue;
+      parts.push(showLabels && b.label ? ('[' + b.label + ']\n' + b.text) : b.text);
+    }
+    let out = parts.join('\n\n').trim();
+    if (includeUrlToggle.checked && state.url){
+      out += '\n\n' + state.url;
+    }
+    return out;
+  }
+
+  function renderPreview(){
+    previewBox.textContent = assembleText() || 'Текст появится здесь после обработки.';
+  }
+
+  function syncExportVisibility(){
+    const has = state.blocks.length > 0;
+    $('#step-export').classList.toggle('hidden', !has);
+  }
+
+  /* ---------------- step 1: search ---------------- */
+  $('#searchBtn').addEventListener('click', doSearch);
+  $('#searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+  function doSearch(){
+    const q = $('#searchInput').value.trim();
+    if (!q){ toast('Введите название песни'); return; }
+    window.open('https://holychords.pro/search?name=' + encodeURIComponent(q), '_blank', 'noopener');
+  }
+
+  /* ---------------- step 2: paste & process ---------------- */
+  $('#processBtn').addEventListener('click', async () => {
+    const raw = $('#rawInput').value;
+    if (!raw.trim()){ toast('Сначала вставьте текст песни'); return; }
+
+    state.title = $('#titleInput').value.trim();
+    state.url = $('#urlInput').value.trim();
+
+    const cleaned = stripChords(raw);
+    state.blocks = splitIntoBlocks(cleaned);
+
+    $('#step-blocks').classList.remove('hidden');
+    syncExportVisibility();
+    renderBlocks();
+    renderPreview();
+
+    if (state.url){
+      const ok = await copyText(state.url);
+      $('#copyUrlHint').textContent = ok
+        ? 'Ссылка на источник скопирована в буфер обмена.'
+        : 'Не удалось скопировать ссылку автоматически — скопируйте её вручную.';
+      toast(ok ? 'Ссылка на источник скопирована' : 'Аккорды убраны');
+    } else {
+      toast('Аккорды убраны, текст разложен по блокам');
+    }
+
+    document.getElementById('step-blocks').scrollIntoView({behavior:'smooth', block:'start'});
+  });
+
+  $('#clearBtn').addEventListener('click', () => {
+    $('#titleInput').value = '';
+    $('#urlInput').value = '';
+    $('#rawInput').value = '';
+    $('#copyUrlHint').textContent = '';
+  });
+
+  $('#addBlockBtn').addEventListener('click', () => {
+    state.blocks.push({ id:newId(), label:'Новый блок', text:'' });
+    renderBlocks(); renderPreview(); syncExportVisibility();
+  });
+
+  /* ---------------- step 4: export actions ---------------- */
+  showLabelsToggle.addEventListener('change', renderPreview);
+  includeUrlToggle.addEventListener('change', renderPreview);
+
+  $('#copyBtn').addEventListener('click', async () => {
+    const ok = await copyText(assembleText());
+    toast(ok ? 'Текст скопирован в буфер обмена' : 'Не удалось скопировать — попробуйте выделить текст вручную');
+  });
+
+  $('#downloadBtn').addEventListener('click', () => {
+    const name = sanitizeFilename(state.title) + '.txt';
+    downloadTextFile(name, assembleText());
+    toast('Файл скачан: ' + name);
+  });
+
+  $('#copyLinkBtn').addEventListener('click', async () => {
+    if (!state.url){ toast('Ссылка не указана'); return; }
+    const ok = await copyText(state.url);
+    toast(ok ? 'Ссылка скопирована' : 'Не удалось скопировать ссылку');
+  });
+
+  /* ---------------- init ---------------- */
+  renderBlocks();
+  renderPreview();
+})();
+</script>
+</body>
+</html>
