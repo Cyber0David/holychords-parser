@@ -179,6 +179,33 @@
   }
   .add-block{align-self:flex-start;}
 
+  /* ---------- split-by-lines menu ---------- */
+  .split-menu-wrap{position:relative;display:inline-flex;}
+  .split-menu{
+    position:absolute; top:calc(100% + 8px); right:0;
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    box-shadow:var(--shadow); padding:8px; min-width:248px; z-index:30;
+    opacity:0; visibility:hidden; transform:translateY(-6px) scale(.97);
+    transform-origin: top right;
+    transition:opacity .15s ease, transform .15s ease, visibility .15s;
+  }
+  .split-menu.open{opacity:1; visibility:visible; transform:translateY(0) scale(1);}
+  .split-menu-heading{
+    font:600 11px/1.4 'Inter'; color:var(--ink-soft); padding:2px 8px 8px;
+    text-transform:uppercase; letter-spacing:.03em;
+  }
+  .split-menu-item{
+    display:block; width:100%; text-align:left; background:transparent; border:none;
+    border-radius:7px; padding:9px 10px; font:500 13.5px/1.35 'Inter'; color:var(--ink);
+    margin:0;
+  }
+  .split-menu-item:hover{background:var(--paper-deep); color:var(--accent-deep);}
+  .split-menu-back{
+    color:var(--ink-soft); font-size:12px; margin-top:2px;
+    border-top:1px solid var(--line-soft); padding-top:9px; border-radius:0;
+  }
+  .split-menu-back:hover{color:var(--accent-deep); background:transparent;}
+
   /* ---------- preview ---------- */
   #previewBox{
     background:var(--mono-bg);border:1px solid var(--line);border-radius:var(--radius);
@@ -300,7 +327,8 @@
         <button class="btn-ghost add-block" id="addBlockBtn">+ Добавить блок</button>
         <button class="btn-ghost" id="addChorusAfterBtn">🔁 Добавить припев после блоков</button>
       </div>
-      <p class="hint">«Добавить припев после блоков» вставит копию припева после каждого куплета, бриджа и т.п. — кроме самого припева и блока «end».</p>
+      <p class="hint">«Добавить припев после блоков» вставит копию припева после каждого куплета, бриджа и т.п. — кроме самого припева и блока «end»; если припев уже был разбит на части кнопкой «Разбить», копии сохранят такое же деление.</p>
+      <p class="hint">Кнопка «⠿ Разбить ▾» появляется у блоков от 3 строк и предлагает разделить их по 2 или по 4 строки (по 4 — только если строк больше четырёх); частям присваиваются имена вида «Припев (2)», «Припев (3)».</p>
     </div>
   </section>
 
@@ -351,7 +379,7 @@
 <footer>
   Локальный инструмент: ничего не уходит на сервер, весь разбор текста происходит в браузере.
   <br>Источник песен — <a href="https://holychords.pro" target="_blank" rel="noopener">holychords.pro</a>.
-  <br><span style="opacity:.6">build 2026-06-20.2 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
+  <br><span style="opacity:.6">build 2026-06-20.3 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
 </footer>
 
 <script>
@@ -510,6 +538,17 @@
     return { number: m[1], text: lines.join('\n') };
   }
 
+  // Recognizes the "(2)", "(3)" … suffix added to a block's label when it was
+  // produced by the line-count split tool, so split parts can be grouped back
+  // together by their shared original label (used to keep a split chorus intact
+  // when it gets duplicated after verses, and to number further split parts).
+  const SPLIT_SUFFIX_RE = /\s*\((\d+)\)\s*$/;
+  function getLabelBase(label){
+    const trimmed = (label || '').trim();
+    const m = trimmed.match(SPLIT_SUFFIX_RE);
+    return m ? trimmed.slice(0, m.index).trim() : trimmed;
+  }
+
   function splitIntoBlocks(text){
     const lines = text.split('\n');
     const matches = lines.map(l => matchLabel(l.trim()));
@@ -593,6 +632,8 @@
       if (idx === state.blocks.length - 1){ downBtn.disabled = true; mergeBtn.disabled = true; }
 
       controls.append(upBtn, downBtn, splitBtn, mergeBtn, dupBtn, delBtn);
+      const linesMenu = buildSplitByLinesControl(idx, block);
+      if (linesMenu) controls.appendChild(linesMenu);
       top.append(labelInput, controls);
 
       const ta = document.createElement('textarea');
@@ -665,16 +706,179 @@
     renderBlocks(); renderPreview();
   }
 
+  /* ---------------- optional "split by line count" menu ---------------- */
+  // Strips blank lines from the edges only, so interior structure of the
+  // block is preserved while we count/group its actual lyric lines.
+  function getTrimmedLines(text){
+    const lines = text.split('\n');
+    while (lines.length && lines[0].trim() === '') lines.shift();
+    while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+    return lines;
+  }
+
+  function lastLinesPhrase(n){
+    return n === 1 ? 'последнюю строчку' : ('последние ' + n + ' строчки');
+  }
+
+  function mkMenuItem(text, onClick){
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'split-menu-item';
+    b.textContent = text;
+    b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+    return b;
+  }
+
+  function closeAllSplitMenus(){
+    document.querySelectorAll('.split-menu.open').forEach(m => m.classList.remove('open'));
+  }
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.split-menu-wrap')) closeAllSplitMenus();
+  });
+
+  // Builds the optional "Разбить по строкам" button + slide-down menu for a
+  // block. Returns null when the block is too short to offer a meaningful
+  // split (fewer than 3 lines). The menu's options adapt to the block size:
+  // groups of 4 are only offered once the block is bigger than 4 lines —
+  // for an exactly-4-line block only "по 2" makes sense.
+  function buildSplitByLinesControl(idx, block){
+    const total = getTrimmedLines(block.text).length;
+    if (total < 3) return null;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'split-menu-wrap';
+
+    const menu = document.createElement('div');
+    menu.className = 'split-menu';
+
+    const toggleBtn = mkBtn('⠿ Разбить ▾', 'btn-ghost btn-sm', 'Разбить блок на части по количеству строк', (e) => {
+      e.stopPropagation();
+      const willOpen = !menu.classList.contains('open');
+      closeAllSplitMenus();
+      if (willOpen){ renderSizeStep(); menu.classList.add('open'); }
+    });
+
+    function renderSizeStep(){
+      menu.innerHTML = '';
+      const heading = document.createElement('div');
+      heading.className = 'split-menu-heading';
+      heading.textContent = 'Разбить блок по:';
+      menu.appendChild(heading);
+      menu.appendChild(mkMenuItem('по 2 строки', () => chooseSize(2)));
+      if (total > 4){
+        menu.appendChild(mkMenuItem('по 4 строки', () => chooseSize(4)));
+      }
+    }
+
+    function chooseSize(groupSize){
+      const remainder = getTrimmedLines(block.text).length % groupSize;
+      if (remainder === 0){
+        performLineSplit(idx, groupSize, null);
+        menu.classList.remove('open');
+        return;
+      }
+      renderRemainderStep(groupSize, remainder);
+    }
+
+    function renderRemainderStep(groupSize, remainder){
+      menu.innerHTML = '';
+      const heading = document.createElement('div');
+      heading.className = 'split-menu-heading';
+      heading.textContent = 'Строки делятся не поровну — что сделать с остатком?';
+      menu.appendChild(heading);
+      const phrase = lastLinesPhrase(remainder);
+      const fullGroups = Math.floor(getTrimmedLines(block.text).length / groupSize);
+      // Merging the remainder only makes sense when there's a separate full
+      // group for it to join — with just one full group, "merge" would just
+      // reassemble the original block and split nothing.
+      if (fullGroups >= 2){
+        menu.appendChild(mkMenuItem('Оставить ' + phrase + ' с последним блоком', () => {
+          performLineSplit(idx, groupSize, 'merge');
+          menu.classList.remove('open');
+        }));
+      }
+      menu.appendChild(mkMenuItem('Отделить ' + phrase + ' в отдельный блок', () => {
+        performLineSplit(idx, groupSize, 'separate');
+        menu.classList.remove('open');
+      }));
+      const back = mkMenuItem('← Назад', () => renderSizeStep());
+      back.classList.add('split-menu-back');
+      menu.appendChild(back);
+    }
+
+    wrap.append(toggleBtn, menu);
+    return wrap;
+  }
+
+  // remainderMode: null (divides evenly) | 'merge' (leftover joins the last
+  // full group) | 'separate' (leftover becomes its own trailing block).
+  // The first resulting part keeps the block's original id and label so
+  // nothing else referencing it breaks; later parts get fresh ids and a
+  // "(2)", "(3)", … suffix on the same label.
+  function performLineSplit(idx, groupSize, remainderMode){
+    const block = state.blocks[idx];
+    if (!block) return;
+    const lines = getTrimmedLines(block.text);
+    const total = lines.length;
+    const groups = [];
+    let i = 0;
+    while (i + groupSize <= total){
+      groups.push(lines.slice(i, i + groupSize));
+      i += groupSize;
+    }
+    const leftover = lines.slice(i);
+    if (leftover.length){
+      if (remainderMode === 'merge' && groups.length){
+        groups[groups.length - 1] = groups[groups.length - 1].concat(leftover);
+      } else {
+        groups.push(leftover);
+      }
+    }
+    if (groups.length < 2){
+      toast('Этот блок нельзя разбить на такие части');
+      return;
+    }
+
+    const baseLabel = block.label;
+    const newBlocks = groups.map((g, gi) => ({
+      id: gi === 0 ? block.id : newId(),
+      label: gi === 0 ? baseLabel : (baseLabel + ' (' + (gi + 1) + ')'),
+      text: g.join('\n')
+    }));
+
+    state.blocks.splice(idx, 1, ...newBlocks);
+    renderBlocks(); renderPreview();
+    toast('Блок разбит на ' + newBlocks.length + ' части');
+  }
+
   /* ---------------- auto-insert chorus after other blocks ---------------- */
   const CHORUS_LABEL_RE = /^(припев|приспів|приспев|chorus)(?![a-zа-яёіїєґ])/i;
   const END_LABEL_RE = /^(end|конец|outro|аутро|финал|кода|coda)(?![a-zа-яёіїєґ])/i;
 
-  function isChorusLabel(label){ return CHORUS_LABEL_RE.test((label || '').trim()); }
-  function isEndLabel(label){ return END_LABEL_RE.test((label || '').trim()); }
+  function isChorusLabel(label){ return CHORUS_LABEL_RE.test(getLabelBase(label)); }
+  function isEndLabel(label){ return END_LABEL_RE.test(getLabelBase(label)); }
+
+  // Finds the chorus and, if it had previously been split into several
+  // blocks via the line-count split menu, the rest of its parts — they sit
+  // right after it and share the same base label (e.g. "Припев", "Припев (2)").
+  function findChorusGroup(){
+    const startIdx = state.blocks.findIndex(b => isChorusLabel(b.label));
+    if (startIdx === -1) return null;
+    const base = getLabelBase(state.blocks[startIdx].label);
+    let endIdx = startIdx;
+    while (
+      endIdx + 1 < state.blocks.length &&
+      getLabelBase(state.blocks[endIdx + 1].label) === base &&
+      isChorusLabel(state.blocks[endIdx + 1].label)
+    ){
+      endIdx++;
+    }
+    return state.blocks.slice(startIdx, endIdx + 1).map(b => ({ label: b.label, text: b.text }));
+  }
 
   function insertChorusAfterBlocks(){
-    const chorus = state.blocks.find(b => isChorusLabel(b.label));
-    if (!chorus){ toast('Не нашёл блок «Припев» — переименуйте нужный блок, чтобы я его узнал'); return; }
+    const chorusGroup = findChorusGroup();
+    if (!chorusGroup){ toast('Не нашёл блок «Припев» — переименуйте нужный блок, чтобы я его узнал'); return; }
 
     const result = [];
     for (let i = 0; i < state.blocks.length; i++){
@@ -684,7 +888,9 @@
       const isEnd = isEndLabel(b.label);
       const nextIsChorus = (i + 1 < state.blocks.length) && isChorusLabel(state.blocks[i + 1].label);
       if (!isChorus && !isEnd && !nextIsChorus){
-        result.push({ id: newId(), label: chorus.label, text: chorus.text });
+        for (const cb of chorusGroup){
+          result.push({ id: newId(), label: cb.label, text: cb.text });
+        }
       }
     }
     state.blocks = result;
