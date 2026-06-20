@@ -351,7 +351,7 @@
 <footer>
   Локальный инструмент: ничего не уходит на сервер, весь разбор текста происходит в браузере.
   <br>Источник песен — <a href="https://holychords.pro" target="_blank" rel="noopener">holychords.pro</a>.
-  <br><span style="opacity:.6">build 2026-06-19.4 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
+  <br><span style="opacity:.6">build 2026-06-19.5 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
 </footer>
 
 <script>
@@ -465,24 +465,36 @@
   }
 
   /* ---------------- block detection ---------------- */
-  const LABEL_RE = /^[\[\(]?\s*(?:[\divxIVX]+\s*[-.):]?\s*)?(куплет|припев|приспів|приспев|бридж|вступление|вступ|интро|аутро|кода|речитатив|verse|chorus|pre-?chorus|bridge|intro|outro|coda|tag)\.?\s*(?:[\divxIVX]+)?\s*[:.\]\)]?\s*$/i;
+  // Matches a section label at the START of a line (Куплет/Припев/Бридж/... in
+  // either "2 куплет:" or "Куплет 2:" order, with or without brackets). Anything
+  // left on the same line AFTER the label is treated as the first line of that
+  // block's body — this is what fixes labels glued to lyrics with no line break.
+  const LABEL_PREFIX_RE = /^[\[\(]?\s*(?:[ivxIVX\d]+\s*[-.):]?\s*)?(куплет|припев|приспів|приспев|бридж|вступление|вступ|интро|аутро|кода|речитатив|verse|chorus|pre-?chorus|bridge|intro|outro|coda|tag)(?![a-zа-яёіїєґ])\.?\s*(?:[ivxIVX\d]+)?\s*[:.\]\)]?\s*/i;
 
   function cleanLabel(raw){
     return raw.trim().replace(/^[\[\(]\s*/, '').replace(/\s*[\]\)]\s*$/, '').replace(/[:.]\s*$/, '').trim();
   }
 
+  function matchLabel(line){
+    const m = line.match(LABEL_PREFIX_RE);
+    if (!m) return null;
+    return { label: cleanLabel(m[0]), rest: line.slice(m[0].length).trim() };
+  }
+
   function splitIntoBlocks(text){
     const lines = text.split('\n');
-    const hasLabels = lines.some(l => LABEL_RE.test(l.trim()));
+    const matches = lines.map(l => matchLabel(l.trim()));
+    const hasLabels = matches.some(m => m !== null);
     let raw = [];
 
     if (hasLabels){
       let current = null;
-      for (const line of lines){
-        const trimmed = line.trim();
-        if (LABEL_RE.test(trimmed)){
+      for (let i = 0; i < lines.length; i++){
+        const line = lines[i];
+        const m = matches[i];
+        if (m){
           if (current) raw.push(current);
-          current = { label: cleanLabel(trimmed), text: '' };
+          current = { label: m.label, text: m.rest || '' };
         } else {
           if (!current) current = { label: 'Блок 1', text: '' };
           current.text += (current.text ? '\n' : '') + line;
