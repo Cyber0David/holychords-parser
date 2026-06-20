@@ -341,7 +341,7 @@
         <button class="btn-ghost add-block" id="addBlockBtn">+ Добавить блок</button>
         <button class="btn-ghost" id="addChorusAfterBtn">🔁 Добавить припев после блоков</button>
       </div>
-      <p class="hint">«Добавить припев после блоков» вставит копию припева после каждого куплета, бриджа и т.п. — кроме самого припева и блока «end»; если припев уже был разбит на части кнопкой «Разбить», копии сохранят такое же деление.</p>
+      <p class="hint">«Добавить припев после блоков» вставит копию припева после каждого куплета, бриджа и т.п. — кроме самого припева и блока «end»; если припев уже был разбит на части кнопкой «Разбить», копии сохранят такое же деление. Понимает и нумерованные варианты сокращения — «Пр. 2:», «Пр 2:», «2 Пр.:» — как «Припев 2». Если в песне несколько разных припевов (например, «Припев 1» и «Припев 2» с разным текстом), кнопка не будет гадать, какой из них копировать, и попросит расставить их вручную.</p>
       <p class="hint">Кнопка «⠿ Разбить ▾» появляется у блоков от 3 строк и предлагает разделить их по 2 или по 4 строки (по 4 — только если строк больше четырёх); частям присваиваются имена вида «Припев (2)», «Припев (3)».</p>
 
       <div class="line-limit-panel">
@@ -423,7 +423,7 @@
 <footer>
   Локальный инструмент: ничего не уходит на сервер, весь разбор текста происходит в браузере.
   <br>Источник песен — <a href="https://holychords.pro" target="_blank" rel="noopener">holychords.pro</a>.
-  <br><span style="opacity:.6">build 2026-06-20.5 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
+  <br><span style="opacity:.6">build 2026-06-20.6 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
 </footer>
 
 <script>
@@ -633,9 +633,12 @@
   // line of that block's body — fixes labels glued to lyrics with no line break.
   const LABEL_PREFIX_RE = /^[\[\(]?\s*(?:([ivxIVX\d]+)\s*[-.):]?\s*)?(куплет|припев|приспів|приспев|бридж|вступление|вступ|интро|аутро|кода|финал|концовка|конец|речитатив|verse|chorus|pre-?chorus|bridge|intro|outro|coda|tag|end)(?![a-zа-яёіїєґ])\.?\s*([ivxIVX\d]+)?\s*[:.\]\)]?\s*/i;
 
-  // The "Пр." / "Пр:" / "Пр.:" shorthand for Припев — requires the trailing
-  // punctuation so it never matches ordinary words that start with "пр".
-  const PR_ABBREV_RE = /^[\[\(]?\s*пр[.:]+\s*[\]\)]?\s*/i;
+  // The "Пр." / "Пр:" / "Пр.:" shorthand for Припев — and its numbered-variant
+  // forms "Пр. 2:", "Пр 2:", "Пр.2:", "2 Пр.:" for songs with more than one
+  // distinct chorus. Still requires trailing punctuation (mandatory [.:]+)
+  // so the 2-letter abbreviation never matches ordinary words starting with
+  // "пр" — a bare "Пр" with nothing else, and any number must come with it.
+  const PR_ABBREV_RE = /^[\[\(]?\s*(?:([ivxIVX\d]+)\s*[-.):]?\s*)?пр(?:\.?\s*([ivxIVX\d]+)\s*[.:]+|[.:]+)\s*[\]\)]?\s*/i;
 
   function cleanLabel(raw){
     return raw.trim().replace(/^[\[\(]\s*/, '').replace(/\s*[\]\)]\s*$/, '').replace(/[:.]\s*$/, '').trim();
@@ -651,7 +654,9 @@
     }
     const pr = line.match(PR_ABBREV_RE);
     if (pr){
-      return { label: 'Припев', rest: line.slice(pr[0].length).trim() };
+      const num = pr[1] || pr[2] || '';
+      const label = num ? ('Припев ' + num) : 'Припев';
+      return { label, rest: line.slice(pr[0].length).trim() };
     }
     return null;
   }
@@ -1109,7 +1114,27 @@
     return state.blocks.slice(startIdx, endIdx + 1).map(b => ({ label: b.label, text: b.text }));
   }
 
+  // Distinct chorus *variants* in the song — "Припев", "Припев 2", "Припев 3"…
+  // each count once no matter how many "(2)", "(3)" split-parts they were cut
+  // into (those share the same base label and collapse to a single entry).
+  // More than one entry here means the song genuinely has several different
+  // choruses with their own lyrics, not just one chorus typed out once.
+  function getChorusVariantBases(){
+    const seen = [];
+    for (const b of state.blocks){
+      if (!isChorusLabel(b.label)) continue;
+      const base = getLabelBase(b.label);
+      if (!seen.includes(base)) seen.push(base);
+    }
+    return seen;
+  }
+
   function insertChorusAfterBlocks(){
+    const variants = getChorusVariantBases();
+    if (variants.length > 1){
+      toast('В песне несколько разных припевов (' + variants.join(', ') + ') — расставьте копии вручную, авто-вставка работает только когда припев один');
+      return;
+    }
     const chorusGroup = findChorusGroup();
     if (!chorusGroup){ toast('Не нашёл блок «Припев» — переименуйте нужный блок, чтобы я его узнал'); return; }
 
