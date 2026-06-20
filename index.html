@@ -355,6 +355,10 @@
         <input type="checkbox" id="includeUrlToggle">
         Добавить ссылку на источник в конец текста
       </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="showRepeatsToggle">
+        Показывать знаки повтора (репризы) — //: и :// — в тексте и в блоках выше
+      </label>
       <div id="previewBox"></div>
       <div class="actions">
         <button class="btn-primary" id="copyBtn">Скопировать текст</button>
@@ -379,7 +383,7 @@
 <footer>
   Локальный инструмент: ничего не уходит на сервер, весь разбор текста происходит в браузере.
   <br>Источник песен — <a href="https://holychords.pro" target="_blank" rel="noopener">holychords.pro</a>.
-  <br><span style="opacity:.6">build 2026-06-20.3 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
+  <br><span style="opacity:.6">build 2026-06-20.4 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
 </footer>
 
 <script>
@@ -482,6 +486,22 @@
     const idx = lines.findIndex(l => SEPARATOR_LINE_RE.test(l.trim()));
     if (idx === -1) return text;
     return lines.slice(0, idx).join('\n');
+  }
+
+  // Repeat marks ("repeat sign") for a sung reprise — one or more slashes,
+  // optionally fused with a colon on either side: "/", "//", ":/", "/:",
+  // "//:", ":///", etc. Controlled by a toggle since unlike chords these are
+  // sometimes worth keeping; stripping also cleans up the whitespace left behind.
+  const REPEAT_MARK_RE = /:?\/+:?/g;
+  function stripRepeatMarks(text){
+    return text
+      .split('\n')
+      .map(line => line
+        .replace(REPEAT_MARK_RE, '')
+        .replace(/[ \t]{2,}/g, ' ')
+        .replace(/^[ \t]+|[ \t]+$/g, '')
+      )
+      .join('\n');
   }
 
   /* ---------------- URL auto-extraction ---------------- */
@@ -716,7 +736,7 @@
       top.append(labelInput, controls);
 
       const ta = document.createElement('textarea');
-      ta.value = block.text;
+      ta.value = showRepeatsToggle.checked ? block.text : stripRepeatMarks(block.text);
       ta.spellcheck = false;
       ta.addEventListener('input', () => {
         block.text = ta.value;
@@ -982,15 +1002,18 @@
   const showTitleToggle = $('#showTitleToggle');
   const showLabelsToggle = $('#showLabelsToggle');
   const includeUrlToggle = $('#includeUrlToggle');
+  const showRepeatsToggle = $('#showRepeatsToggle');
 
   function assembleText(){
     const showTitle = showTitleToggle.checked;
     const showLabels = showLabelsToggle.checked;
+    const showRepeats = showRepeatsToggle.checked;
     const parts = [];
     if (showTitle && state.title) parts.push(state.title.trim());
     for (const b of state.blocks){
-      if (!b.text.trim()) continue;
-      parts.push(showLabels && b.label ? ('[' + b.label + ']\n' + b.text) : b.text);
+      const bodyText = showRepeats ? b.text : stripRepeatMarks(b.text);
+      if (!bodyText.trim()) continue;
+      parts.push(showLabels && b.label ? ('[' + b.label + ']\n' + bodyText) : bodyText);
     }
     let out = parts.join('\n\n').trim();
     if (includeUrlToggle.checked && state.url){
@@ -1069,6 +1092,7 @@
   showTitleToggle.addEventListener('change', renderPreview);
   showLabelsToggle.addEventListener('change', renderPreview);
   includeUrlToggle.addEventListener('change', renderPreview);
+  showRepeatsToggle.addEventListener('change', () => { renderBlocks(); renderPreview(); });
 
   $('#copyBtn').addEventListener('click', async () => {
     const ok = await copyText(assembleText());
