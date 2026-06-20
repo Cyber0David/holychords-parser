@@ -509,11 +509,49 @@
   }
 
   /* ---------------- block detection ---------------- */
-  // Matches a section label at the START of a line (Куплет/Припев/Бридж/... in
-  // either "2 куплет:" or "Куплет 2:" order, with or without brackets). Anything
-  // left on the same line AFTER the label is treated as the first line of that
-  // block's body — this is what fixes labels glued to lyrics with no line break.
-  const LABEL_PREFIX_RE = /^[\[\(]?\s*(?:[ivxIVX\d]+\s*[-.):]?\s*)?(куплет|припев|приспів|приспев|бридж|вступление|вступ|интро|аутро|кода|речитатив|verse|chorus|pre-?chorus|bridge|intro|outro|coda|tag)(?![a-zа-яёіїєґ])\.?\s*(?:[ivxIVX\d]+)?\s*[:.\]\)]?\s*/i;
+  // Every recognized section keyword maps to one canonical Russian name, so
+  // English labels (verse/chorus/bridge/end…) and the "Пр." shorthand all end
+  // up reading the same way in the block list, which is the whole point —
+  // quick orientation when assembling the song.
+  const LABEL_CANONICAL = {
+    'куплет': 'Куплет',
+    'припев': 'Припев',
+    'приспів': 'Припев',
+    'приспев': 'Припев',
+    'бридж': 'Бридж',
+    'вступление': 'Вступление',
+    'вступ': 'Вступление',
+    'интро': 'Вступление',
+    'аутро': 'Концовка',
+    'кода': 'Кода',
+    'финал': 'Концовка',
+    'концовка': 'Концовка',
+    'конец': 'Концовка',
+    'речитатив': 'Речитатив',
+    'verse': 'Куплет',
+    'chorus': 'Припев',
+    'prechorus': 'Пре-припев',
+    'bridge': 'Бридж',
+    'intro': 'Вступление',
+    'outro': 'Концовка',
+    'coda': 'Кода',
+    'tag': 'Тег',
+    'end': 'Концовка'
+  };
+  function canonicalLabel(keyword){
+    const key = keyword.toLowerCase().replace(/-/g, '');
+    return LABEL_CANONICAL[key] || (keyword.charAt(0).toUpperCase() + keyword.slice(1));
+  }
+
+  // Matches a section label at the START of a line (Куплет/Припев/Бридж/End/…
+  // in either "2 куплет:" or "Куплет 2:" order, with or without brackets).
+  // Anything left on the same line AFTER the label is treated as the first
+  // line of that block's body — fixes labels glued to lyrics with no line break.
+  const LABEL_PREFIX_RE = /^[\[\(]?\s*(?:([ivxIVX\d]+)\s*[-.):]?\s*)?(куплет|припев|приспів|приспев|бридж|вступление|вступ|интро|аутро|кода|финал|концовка|конец|речитатив|verse|chorus|pre-?chorus|bridge|intro|outro|coda|tag|end)(?![a-zа-яёіїєґ])\.?\s*([ivxIVX\d]+)?\s*[:.\]\)]?\s*/i;
+
+  // The "Пр." / "Пр:" / "Пр.:" shorthand for Припев — requires the trailing
+  // punctuation so it never matches ordinary words that start with "пр".
+  const PR_ABBREV_RE = /^[\[\(]?\s*пр[.:]+\s*[\]\)]?\s*/i;
 
   function cleanLabel(raw){
     return raw.trim().replace(/^[\[\(]\s*/, '').replace(/\s*[\]\)]\s*$/, '').replace(/[:.]\s*$/, '').trim();
@@ -521,8 +559,17 @@
 
   function matchLabel(line){
     const m = line.match(LABEL_PREFIX_RE);
-    if (!m) return null;
-    return { label: cleanLabel(m[0]), rest: line.slice(m[0].length).trim() };
+    if (m){
+      const num = m[1] || m[3] || '';
+      const base = canonicalLabel(m[2]);
+      const label = num ? (base + ' ' + num) : base;
+      return { label, rest: line.slice(m[0].length).trim() };
+    }
+    const pr = line.match(PR_ABBREV_RE);
+    if (pr){
+      return { label: 'Припев', rest: line.slice(pr[0].length).trim() };
+    }
+    return null;
   }
 
   // Leading verse numbers glued to the first line of a verse, e.g. "4. Текст…"
@@ -552,33 +599,65 @@
   function splitIntoBlocks(text){
     const lines = text.split('\n');
     const matches = lines.map(l => matchLabel(l.trim()));
-    const hasLabels = matches.some(m => m !== null);
-    let raw = [];
 
-    if (hasLabels){
-      let current = null;
-      for (let i = 0; i < lines.length; i++){
-        const line = lines[i];
-        const m = matches[i];
-        if (m){
-          if (current) raw.push(current);
-          current = { label: m.label, text: m.rest || '' };
-        } else {
-          if (!current) current = { label: 'Блок 1', text: '' };
-          current.text += (current.text ? '\n' : '') + line;
-        }
-      }
-      if (current) raw.push(current);
-    } else {
-      const chunks = text.split(/\n{2,}/);
-      raw = chunks.map((c, i) => {
-        const vn = extractVerseNumber(c);
-        if (vn) return { label: 'Куплет ' + vn.number, text: vn.text };
-        return { label: 'Блок ' + (i+1), text: c };
-      });
+    // Single pass: a new block starts whenever a recognized label is hit
+    // (regardless of blank lines), OR whenever a blank-line gap separates two
+    // paragraphs that have no label of their own. The two used to be separate,
+    // mutually-exclusive modes — if anything anywhere matched a label, blank-line
+    // splitting was disabled for the WHOLE document, gluing every unlabeled verse
+    // together. Now both rules apply at every point, together.
+    const raw = [];
+    let current = null;
+    let blankRun = 0;
+    let genericCount = 0;
+
+    function flush(){
+      if (current && current.text.trim()) raw.push(current);
+      current = null;
     }
 
-    return raw
+    for (let i = 0; i < lines.length; i++){
+      const line = lines[i];
+      const trimmed = line.trim();
+      const m = matches[i];
+
+      if (m){
+        flush();
+        current = { label: m.label, text: m.rest || '' };
+        blankRun = 0;
+        continue;
+      }
+
+      if (trimmed === ''){
+        blankRun++;
+        continue;
+      }
+
+      if (blankRun > 0){
+        flush();
+      }
+      blankRun = 0;
+
+      if (!current){
+        genericCount++;
+        current = { label: 'Блок ' + genericCount, text: '' };
+      }
+      current.text += (current.text ? '\n' : '') + line;
+    }
+    flush();
+
+    // A still-generic block ("Блок N") whose first line starts with a bare
+    // verse number ("4. …") gets renamed to match — same idea as a recognized
+    // label, just discovered after the fact since it has no keyword to match on.
+    const named = raw.map(b => {
+      if (/^Блок \d+$/.test(b.label)){
+        const vn = extractVerseNumber(b.text);
+        if (vn) return { label: 'Куплет ' + vn.number, text: vn.text };
+      }
+      return b;
+    });
+
+    return named
       .map(b => ({ label: b.label, text: b.text.trim() }))
       .filter(b => b.text.length > 0)
       .map(b => ({ id: newId(), label: b.label, text: b.text }));
@@ -853,7 +932,7 @@
 
   /* ---------------- auto-insert chorus after other blocks ---------------- */
   const CHORUS_LABEL_RE = /^(припев|приспів|приспев|chorus)(?![a-zа-яёіїєґ])/i;
-  const END_LABEL_RE = /^(end|конец|outro|аутро|финал|кода|coda)(?![a-zа-яёіїєґ])/i;
+  const END_LABEL_RE = /^(end|конец|outro|аутро|финал|концовка|кода|coda)(?![a-zа-яёіїєґ])/i;
 
   function isChorusLabel(label){ return CHORUS_LABEL_RE.test(getLabelBase(label)); }
   function isEndLabel(label){ return END_LABEL_RE.test(getLabelBase(label)); }
