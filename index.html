@@ -179,6 +179,20 @@
   }
   .add-block{align-self:flex-start;}
 
+  /* ---------- global line-limit panel ---------- */
+  .line-limit-panel{
+    margin-top:16px;background:var(--paper-deep);border:1px solid var(--line);
+    border-radius:var(--radius);padding:14px 16px 16px;
+  }
+  .line-limit-panel .row{margin-top:4px;}
+  .num-input{
+    width:84px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;
+    background:var(--card);color:var(--ink);font:600 14px 'IBM Plex Mono', monospace;
+    text-align:center;outline:none;
+  }
+  .num-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(168,118,31,0.16);}
+  .toggle-row .num-input{margin:0 2px;}
+
   /* ---------- split-by-lines menu ---------- */
   .split-menu-wrap{position:relative;display:inline-flex;}
   .split-menu{
@@ -329,6 +343,21 @@
       </div>
       <p class="hint">«Добавить припев после блоков» вставит копию припева после каждого куплета, бриджа и т.п. — кроме самого припева и блока «end»; если припев уже был разбит на части кнопкой «Разбить», копии сохранят такое же деление.</p>
       <p class="hint">Кнопка «⠿ Разбить ▾» появляется у блоков от 3 строк и предлагает разделить их по 2 или по 4 строки (по 4 — только если строк больше четырёх); частям присваиваются имена вида «Припев (2)», «Припев (3)».</p>
+
+      <div class="line-limit-panel">
+        <label class="toggle-row" style="margin:0 0 12px;">
+          <input type="checkbox" id="lineLimitAutoToggle">
+          Сразу применять лимит к каждой новой песне после разбора (настройка запоминается в этом браузере)
+        </label>
+        <div class="row" style="align-items:flex-end;gap:14px;">
+          <div class="field" style="flex:0 0 auto;margin-bottom:0;">
+            <label class="field-label" for="lineLimitInput">Макс. строк на слайде</label>
+            <input type="text" inputmode="numeric" id="lineLimitInput" class="num-input" value="4">
+          </div>
+          <button class="btn-ghost" id="applyLineLimitBtn">Применить лимит к текущим блокам</button>
+        </div>
+        <p class="hint" style="margin-top:10px;">Глобальный лимит — в отличие от кнопки «Разбить» у блока, это не ручная разовая операция: он сразу разбивает на слайды ВСЕ блоки длиннее указанного, а остаток просто становится последним слайдом части. Имена частей — как при ручном разбиении: «Куплет 1», «Куплет 1 (2)»…</p>
+      </div>
     </div>
   </section>
 
@@ -359,6 +388,17 @@
         <input type="checkbox" id="showRepeatsToggle">
         Показывать знаки повтора (репризы) — //: и :// — в тексте и в блоках выше
       </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="uppercaseToggle">
+        Превратить весь текст в ЗАГЛАВНЫЕ БУКВЫ
+      </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="wrapLinesToggle">
+        Переносить строки длиннее
+        <input type="text" inputmode="numeric" id="wrapCharsInput" class="num-input" value="40">
+        символов
+      </label>
+      <p class="hint" style="margin:-6px 0 16px;">Заглавные буквы и перенос строк меняют только готовый текст ниже (предпросмотр, копирование, файл) — блоки выше остаются как есть, их удобнее редактировать в обычном регистре.</p>
       <div id="previewBox"></div>
       <div class="actions">
         <button class="btn-primary" id="copyBtn">Скопировать текст</button>
@@ -383,7 +423,7 @@
 <footer>
   Локальный инструмент: ничего не уходит на сервер, весь разбор текста происходит в браузере.
   <br>Источник песен — <a href="https://holychords.pro" target="_blank" rel="noopener">holychords.pro</a>.
-  <br><span style="opacity:.6">build 2026-06-20.4 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
+  <br><span style="opacity:.6">build 2026-06-20.5 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
 </footer>
 
 <script>
@@ -502,6 +542,30 @@
         .replace(/^[ \t]+|[ \t]+$/g, '')
       )
       .join('\n');
+  }
+
+  // Wraps a single line onto several lines at word boundaries once it passes
+  // maxChars. A lone word longer than maxChars on its own is left intact —
+  // breaking mid-word looks worse on a slide than a slightly wide line.
+  function wrapLongLine(line, maxChars){
+    if (line.length <= maxChars) return [line];
+    const words = line.split(' ');
+    const out = [];
+    let cur = '';
+    for (const w of words){
+      const candidate = cur ? (cur + ' ' + w) : w;
+      if (candidate.length > maxChars && cur){
+        out.push(cur);
+        cur = w;
+      } else {
+        cur = candidate;
+      }
+    }
+    if (cur) out.push(cur);
+    return out;
+  }
+  function wrapText(text, maxChars){
+    return text.split('\n').flatMap(line => wrapLongLine(line, maxChars)).join('\n');
   }
 
   /* ---------------- URL auto-extraction ---------------- */
@@ -950,6 +1014,76 @@
     toast('Блок разбит на ' + newBlocks.length + ' части');
   }
 
+  /* ---------------- global "max lines per slide" limit ---------------- */
+  // Unlike the per-block "Разбить" menu (a manual, one-block-at-a-time
+  // action), this is a blanket rule applied to every block at once: cut
+  // straight every maxLines lines, no remainder dialog — whatever's left
+  // over at the end of a block just becomes its final, shorter slide. Reuses
+  // the same "(2)", "(3)" naming so split parts still group correctly for
+  // the chorus-duplication feature.
+  function chunkBlockByLimit(block, maxLines){
+    const lines = getTrimmedLines(block.text);
+    if (lines.length <= maxLines) return [block];
+    const chunks = [];
+    for (let i = 0; i < lines.length; i += maxLines){
+      chunks.push(lines.slice(i, i + maxLines));
+    }
+    const baseLabel = block.label;
+    return chunks.map((g, gi) => ({
+      id: gi === 0 ? block.id : newId(),
+      label: gi === 0 ? baseLabel : (baseLabel + ' (' + (gi + 1) + ')'),
+      text: g.join('\n')
+    }));
+  }
+
+  function applyLineLimitToBlocks(blocks, maxLines){
+    const result = [];
+    for (const b of blocks) result.push(...chunkBlockByLimit(b, maxLines));
+    return result;
+  }
+
+  function getLineLimitMax(){
+    const v = parseInt($('#lineLimitInput').value, 10);
+    return (Number.isFinite(v) && v > 0) ? v : null;
+  }
+
+  function applyGlobalLineLimit(showFeedback){
+    const max = getLineLimitMax();
+    if (!max){ if (showFeedback) toast('Укажите лимит строк больше нуля'); return; }
+    const before = state.blocks.length;
+    state.blocks = applyLineLimitToBlocks(state.blocks, max);
+    renderBlocks(); renderPreview();
+    if (showFeedback){
+      const added = state.blocks.length - before;
+      toast(added > 0 ? ('Лимит применён — слайдов стало больше на ' + added) : 'Все блоки уже укладываются в лимит');
+    }
+  }
+
+  // The auto-apply preference (on/off + the number itself) is the one thing
+  // in this tool worth remembering between songs — it's a property of your
+  // projector/screen, not of any one song — so it's the only setting kept
+  // in localStorage.
+  const LINE_LIMIT_PREF_KEY = 'songboard_line_limit_v1';
+  function loadLineLimitPref(){
+    try{
+      const raw = localStorage.getItem(LINE_LIMIT_PREF_KEY);
+      if (!raw) return;
+      const pref = JSON.parse(raw);
+      if (pref && typeof pref.max === 'number' && pref.max > 0){
+        $('#lineLimitInput').value = String(pref.max);
+      }
+      $('#lineLimitAutoToggle').checked = !!(pref && pref.auto);
+    }catch(e){ /* ignore malformed/unavailable storage */ }
+  }
+  function saveLineLimitPref(){
+    try{
+      localStorage.setItem(LINE_LIMIT_PREF_KEY, JSON.stringify({
+        auto: $('#lineLimitAutoToggle').checked,
+        max: getLineLimitMax() || 4
+      }));
+    }catch(e){ /* private mode / storage disabled — fail silently */ }
+  }
+
   /* ---------------- auto-insert chorus after other blocks ---------------- */
   const CHORUS_LABEL_RE = /^(припев|приспів|приспев|chorus)(?![a-zа-яёіїєґ])/i;
   const END_LABEL_RE = /^(end|конец|outro|аутро|финал|концовка|кода|coda)(?![a-zа-яёіїєґ])/i;
@@ -1003,21 +1137,35 @@
   const showLabelsToggle = $('#showLabelsToggle');
   const includeUrlToggle = $('#includeUrlToggle');
   const showRepeatsToggle = $('#showRepeatsToggle');
+  const uppercaseToggle = $('#uppercaseToggle');
+  const wrapLinesToggle = $('#wrapLinesToggle');
+  const wrapCharsInput = $('#wrapCharsInput');
+
+  function getWrapMaxChars(){
+    const v = parseInt(wrapCharsInput.value, 10);
+    return (Number.isFinite(v) && v > 0) ? v : null;
+  }
 
   function assembleText(){
     const showTitle = showTitleToggle.checked;
     const showLabels = showLabelsToggle.checked;
     const showRepeats = showRepeatsToggle.checked;
+    const wrapOn = wrapLinesToggle.checked;
+    const wrapMax = getWrapMaxChars();
+    const fmt = t => (wrapOn && wrapMax) ? wrapText(t, wrapMax) : t;
+
     const parts = [];
-    if (showTitle && state.title) parts.push(state.title.trim());
+    if (showTitle && state.title) parts.push(fmt(state.title.trim()));
     for (const b of state.blocks){
       const bodyText = showRepeats ? b.text : stripRepeatMarks(b.text);
       if (!bodyText.trim()) continue;
-      parts.push(showLabels && b.label ? ('[' + b.label + ']\n' + bodyText) : bodyText);
+      const formattedBody = fmt(bodyText);
+      parts.push(showLabels && b.label ? ('[' + b.label + ']\n' + formattedBody) : formattedBody);
     }
     let out = parts.join('\n\n').trim();
+    if (uppercaseToggle.checked) out = out.toUpperCase();
     if (includeUrlToggle.checked && state.url){
-      out += '\n\n' + state.url;
+      out += '\n\n' + state.url; // left as-is: uppercasing could break a case-sensitive URL path
     }
     return out;
   }
@@ -1055,6 +1203,10 @@
     const withoutFooter = stripFooterAfterSeparator(withoutUrl);
     const cleaned = stripChords(withoutFooter);
     state.blocks = splitIntoBlocks(cleaned);
+    if ($('#lineLimitAutoToggle').checked){
+      const max = getLineLimitMax();
+      if (max) state.blocks = applyLineLimitToBlocks(state.blocks, max);
+    }
 
     $('#step-blocks').classList.remove('hidden');
     syncExportVisibility();
@@ -1088,11 +1240,18 @@
 
   $('#addChorusAfterBtn').addEventListener('click', insertChorusAfterBlocks);
 
+  $('#applyLineLimitBtn').addEventListener('click', () => applyGlobalLineLimit(true));
+  $('#lineLimitAutoToggle').addEventListener('change', saveLineLimitPref);
+  $('#lineLimitInput').addEventListener('change', saveLineLimitPref);
+
   /* ---------------- step 4: export actions ---------------- */
   showTitleToggle.addEventListener('change', renderPreview);
   showLabelsToggle.addEventListener('change', renderPreview);
   includeUrlToggle.addEventListener('change', renderPreview);
   showRepeatsToggle.addEventListener('change', () => { renderBlocks(); renderPreview(); });
+  uppercaseToggle.addEventListener('change', renderPreview);
+  wrapLinesToggle.addEventListener('change', renderPreview);
+  wrapCharsInput.addEventListener('input', () => { if (wrapLinesToggle.checked) renderPreview(); });
 
   $('#copyBtn').addEventListener('click', async () => {
     const ok = await copyText(assembleText());
@@ -1112,6 +1271,7 @@
   });
 
   /* ---------------- init ---------------- */
+  loadLineLimitPref();
   renderBlocks();
   renderPreview();
 })();
