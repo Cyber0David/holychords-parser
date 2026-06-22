@@ -179,6 +179,14 @@
   }
   .add-block{align-self:flex-start;}
 
+  /* ---------- expand/collapse-all tray bar ---------- */
+  .blocks-tray-bar{
+    display:flex;align-items:center;gap:8px;
+    padding:6px 0 10px;border-bottom:1px solid var(--line-soft);
+    margin-bottom:4px;
+  }
+  .blocks-tray-count{font:600 12px/1 'Inter';color:var(--ink-soft);flex:1;}
+
   /* ---------- global line-limit panel ---------- */
   .line-limit-panel{
     margin-top:16px;background:var(--paper-deep);border:1px solid var(--line);
@@ -399,6 +407,11 @@
       </div>
     </div>
     <div class="step-body">
+      <div class="blocks-tray-bar" id="blocksTrayBar">
+        <span class="blocks-tray-count" id="blocksTrayCount"></span>
+        <button class="btn-ghost btn-sm" id="expandAllBtn">Развернуть все</button>
+        <button class="btn-ghost btn-sm" id="collapseAllBtn">Свернуть все</button>
+      </div>
       <div id="blocks"></div>
       <div class="actions">
         <button class="btn-ghost add-block" id="addBlockBtn">+ Добавить блок</button>
@@ -492,7 +505,7 @@
 <footer>
   Локальный инструмент: ничего не уходит на сервер, весь разбор текста происходит в браузере.
   <br>Источник песен — <a href="https://holychords.pro" target="_blank" rel="noopener">holychords.pro</a>.
-  <br><span style="opacity:.6">build 2026-06-21.1 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
+  <br><span style="opacity:.6">build 2026-06-22.1 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
 </footer>
 
 <script>
@@ -503,7 +516,8 @@
   const state = {
     title: '',
     url: '',
-    blocks: [] // {id, label, text}
+    blocks: [],          // {id, label, text}
+    chorusDuplicated: false  // true when auto-insert or manual insert has run
   };
   let idSeq = 1;
   const newId = () => 'blk_' + (idSeq++);
@@ -671,6 +685,7 @@
   // quick orientation when assembling the song.
   const LABEL_CANONICAL = {
     'куплет': 'Куплет',
+    'запев': 'Запев',
     'припев': 'Припев',
     'приспів': 'Припев',
     'приспев': 'Припев',
@@ -700,10 +715,19 @@
   }
 
   // Matches a section label at the START of a line (Куплет/Припев/Бридж/End/…
-  // in either "2 куплет:" or "Куплет 2:" order, with or without brackets).
+  // in either "2 куплет:" or "Куплет 2:" order, with or without brackets, and
+  // now also "(N)" paren-notation for variants, e.g. "Бридж (1)").
   // Anything left on the same line AFTER the label is treated as the first
   // line of that block's body — fixes labels glued to lyrics with no line break.
-  const LABEL_PREFIX_RE = /^[\[\(]?\s*(?:([ivxIVX\d]+)\s*[-.):]?\s*)?(куплет|припев|приспів|приспев|бридж|вступление|вступ|интро|аутро|кода|финал|концовка|конец|речитатив|verse|chorus|pre-?chorus|bridge|intro|outro|coda|tag|end)(?![a-zа-яёіїєґ])\.?\s*([ivxIVX\d]+)?\s*[:.\]\)]?\s*/i;
+  const LABEL_PREFIX_RE = /^[\[\(]?\s*(?:([ivxIVX\d]+)\s*[-.):]?\s*)?(куплет|запев|припев|приспів|приспев|бридж|вступление|вступ|интро|аутро|кода|финал|концовка|конец|речитатив|verse|chorus|pre-?chorus|bridge|intro|outro|coda|tag|end)(?![a-zа-яёіїєґ])\.?\s*(?:\(?\s*([ivxIVX\d]+)\s*\)?)?\s*[:.\]\)]?\s*/i;
+
+  // Performance instruction suffix: "– 1 раз", "– 2 раза", "– раз :", etc.
+  // Applied to a line BEFORE label matching so that "Бридж (1) – раз :" is
+  // parsed as the section label "Бридж 1" (with the suffix stripped), and a
+  // standalone "Припев – 2 раза" becomes a label-only line with no body that
+  // gets silently filtered out — it was just a performance hint in the score,
+  // not actual lyric content.
+  const PERF_INSTR_SUFFIX_RE = /\s*[–—\-]+\s*\d*\s*раз(?:а)?\s*[:]?\s*$/i;
 
   // The "Пр." / "Пр:" / "Пр.:" shorthand for Припев — and its numbered-variant
   // forms "Пр. 2:", "Пр 2:", "Пр.2:", "2 Пр.:" for songs with more than one
@@ -717,18 +741,22 @@
   }
 
   function matchLabel(line){
-    const m = line.match(LABEL_PREFIX_RE);
+    // Strip any performance instruction suffix BEFORE label detection so that
+    // "Бридж (1) – раз :" is treated as "Бридж 1" and "Припев – 2 раза" is
+    // treated as a bare "Припев" label (with empty body → filtered out later).
+    const stripped = line.replace(PERF_INSTR_SUFFIX_RE, '').trim();
+    const m = stripped.match(LABEL_PREFIX_RE);
     if (m){
       const num = m[1] || m[3] || '';
       const base = canonicalLabel(m[2]);
       const label = num ? (base + ' ' + num) : base;
-      return { label, rest: line.slice(m[0].length).trim() };
+      return { label, rest: stripped.slice(m[0].length).trim() };
     }
-    const pr = line.match(PR_ABBREV_RE);
+    const pr = stripped.match(PR_ABBREV_RE);
     if (pr){
       const num = pr[1] || pr[2] || '';
       const label = num ? ('Припев ' + num) : 'Припев';
-      return { label, rest: line.slice(pr[0].length).trim() };
+      return { label, rest: stripped.slice(pr[0].length).trim() };
     }
     return null;
   }
@@ -838,6 +866,11 @@
   }
 
   function renderBlocks(){
+    // Update tray bar count
+    const n = state.blocks.length;
+    const countEl = $('#blocksTrayCount');
+    if (countEl) countEl.textContent = n + ' ' + (n === 1 ? 'блок' : n < 5 ? 'блока' : 'блоков');
+
     blocksEl.innerHTML = '';
     if (!state.blocks.length){
       const empty = document.createElement('div');
@@ -1270,11 +1303,53 @@
       }
     }
     state.blocks = result;
+    state.chorusDuplicated = true;
     renderBlocks(); renderPreview();
+    updateChorusBtn();
     toast('«' + variantBase + '» добавлен после нужных блоков');
   }
 
   function closeChorusMenu(){ $('#chorusMenu').classList.remove('open'); }
+
+  // Removes all duplicate chorus groups, keeping only the FIRST contiguous
+  // group for each distinct chorus base label. Works regardless of how the
+  // duplicates ended up there (auto-insert or manual "Дублировать блок").
+  function removeChorusDuplication(){
+    const groupCounts = {}; // base → number of contiguous groups seen so far
+    let prevChorusBase = null;
+    state.blocks = state.blocks.filter(b => {
+      if (!isChorusLabel(b.label)){
+        prevChorusBase = null;
+        return true; // non-chorus always kept
+      }
+      const base = getLabelBase(b.label);
+      if (base !== prevChorusBase){
+        groupCounts[base] = (groupCounts[base] || 0) + 1;
+        prevChorusBase = base;
+      }
+      return groupCounts[base] === 1; // keep first occurrence group only
+    });
+    state.chorusDuplicated = false;
+    renderBlocks(); renderPreview();
+    updateChorusBtn();
+    toast('Дублирование припева убрано');
+  }
+
+  // Updates the chorus button label and click handler based on current state.
+  // Call after any operation that may change the duplication status.
+  function updateChorusBtn(){
+    const btn = $('#addChorusAfterBtn');
+    if (!btn) return;
+    if (state.chorusDuplicated){
+      btn.textContent = '↩ Убрать дублирование';
+      btn.title = 'Убрать скопированные блоки припева, оставив только оригинал';
+      btn.onclick = removeChorusDuplication;
+    } else {
+      btn.textContent = '🔁 Добавить припев после блоков';
+      btn.title = '';
+      btn.onclick = insertChorusAfterBlocks;
+    }
+  }
 
   function renderChorusVariantStep(variants){
     const menu = $('#chorusMenu');
@@ -1398,15 +1473,25 @@
       if (max) state.blocks = applyLineLimitToBlocks(state.blocks, max);
     }
 
-    // Collapsed by default except the first block, which stays open as a
-    // demonstration of the editing controls — expand the rest only if the
-    // final preview below doesn't look right.
+    // After parsing reset chorus-duplication state, then auto-insert for
+    // single-chorus songs so the user doesn't have to click the button manually.
+    state.chorusDuplicated = false;
+    const variants = getChorusVariantBases();
+    if (variants.length === 1){
+      // Run silently — no toast yet, the URL-copy toast that follows is enough.
+      runChorusInsert(variants[0], false);
+      // runChorusInsert already sets state.chorusDuplicated = true
+    }
+
+    // All blocks collapsed into the tray, first block expanded as an
+    // editing-controls demo.
     collapsedBlockIds = new Set(state.blocks.slice(1).map(b => b.id));
 
     $('#step-blocks').classList.remove('hidden');
     syncExportVisibility();
     renderBlocks();
     renderPreview();
+    updateChorusBtn();
     refreshSideNav();
 
     if (state.url){
@@ -1414,9 +1499,12 @@
       $('#copyUrlHint').textContent = ok
         ? 'Ссылка на источник скопирована в буфер обмена.'
         : 'Не удалось скопировать ссылку автоматически — скопируйте её вручную.';
-      toast(ok ? 'Ссылка на источник скопирована' : 'Аккорды убраны');
+      const msg = ok ? 'Ссылка скопирована' : 'Аккорды убраны';
+      toast(variants.length === 1 ? msg + ', припев продублирован автоматически' : msg);
     } else {
-      toast('Аккорды убраны, текст разложен по блокам');
+      toast(variants.length === 1
+        ? 'Аккорды убраны, текст разложен по блокам — припев продублирован автоматически'
+        : 'Аккорды убраны, текст разложен по блокам');
     }
 
     document.getElementById('step-blocks').scrollIntoView({behavior:'smooth', block:'start'});
@@ -1434,7 +1522,18 @@
     renderBlocks(); renderPreview(); syncExportVisibility();
   });
 
-  $('#addChorusAfterBtn').addEventListener('click', insertChorusAfterBlocks);
+  // Chorus button handler set dynamically in updateChorusBtn().
+  // Seed the initial state so it shows the right label from the start.
+  updateChorusBtn();
+
+  $('#expandAllBtn').addEventListener('click', () => {
+    collapsedBlockIds.clear();
+    renderBlocks();
+  });
+  $('#collapseAllBtn').addEventListener('click', () => {
+    collapsedBlockIds = new Set(state.blocks.map(b => b.id));
+    renderBlocks();
+  });
 
   $('#applyLineLimitBtn').addEventListener('click', () => applyGlobalLineLimit(true));
   $('#lineLimitAutoToggle').addEventListener('change', saveLineLimitPref);
