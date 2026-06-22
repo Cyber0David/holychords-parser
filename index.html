@@ -250,6 +250,58 @@
 
   .hidden{display:none !important;}
 
+  /* ---------- side nav ---------- */
+  .side-nav{
+    position:fixed; right:22px; top:50%; transform:translateY(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+    z-index:40;
+  }
+  .side-nav button{
+    width:38px;height:38px;padding:0;border-radius:50%;
+    background:var(--card);border:1px solid var(--line);color:var(--ink-soft);
+    font:600 13px 'Inter';display:flex;align-items:center;justify-content:center;
+    box-shadow:var(--shadow);
+  }
+  .side-nav button:hover{border-color:var(--accent);color:var(--accent-deep);}
+  .side-nav .nav-num.active{
+    background:linear-gradient(155deg,#C99A3F, var(--accent) 60%, var(--accent-deep));
+    color:#fff8e8;border-color:var(--accent-deep);
+  }
+  .side-nav .nav-num.disabled{opacity:.35;cursor:default;pointer-events:none;}
+  .side-nav .nav-arrow{font-size:15px;}
+  .side-nav .nav-sep{width:18px;height:1px;background:var(--line);margin:2px 0;}
+  @media (max-width:1180px){ .side-nav{display:none;} }
+
+  /* ---------- collapsible block cards ---------- */
+  .block.collapsed{padding:0;}
+  .block-collapsed-row{
+    display:flex;align-items:center;gap:12px;width:100%;
+    background:transparent;border:none;border-radius:var(--radius);
+    padding:14px 16px;text-align:left;font-family:'Inter';
+  }
+  .block-collapsed-label{
+    font:600 14px 'Inter';color:var(--accent-ink);flex:0 0 auto;
+    background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:6px 10px;
+  }
+  .block-collapsed-preview{
+    flex:1 1 auto;min-width:0;color:var(--ink-soft);font-size:13.5px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .block-collapsed-meta{flex:0 0 auto;color:var(--ink-soft);font-size:12px;}
+  .block-collapsed-chevron{flex:0 0 auto;color:var(--ink-soft);font-size:13px;}
+  .block-collapse-toggle{margin-left:auto;}
+
+  /* ---------- collapsible extra export toggles ---------- */
+  .extra-toggles{
+    overflow:hidden; max-height:0; transition:max-height .25s ease;
+  }
+  .extra-toggles.open{max-height:240px;}
+  .extra-toggles-btn{
+    background:transparent;border:none;color:var(--accent-deep);
+    font:600 13px 'Inter';padding:4px 0;margin-bottom:8px;
+  }
+  .extra-toggles-btn:hover{text-decoration:underline;}
+
   ::selection{background:rgba(168,118,31,0.28);}
   :focus-visible{outline:2px solid var(--accent-deep);outline-offset:2px;}
 
@@ -260,6 +312,17 @@
 </style>
 </head>
 <body>
+
+<nav class="side-nav" aria-label="Разделы">
+  <button class="nav-arrow" id="navUp" title="К предыдущему разделу">▲</button>
+  <div class="nav-sep"></div>
+  <button class="nav-num" data-target="step-search" title="Найдите песню">1</button>
+  <button class="nav-num" data-target="step-paste" title="Вставьте текст песни">2</button>
+  <button class="nav-num" data-target="step-blocks" title="Соберите песню">3</button>
+  <button class="nav-num" data-target="step-export" title="Скопируйте или скачайте">4</button>
+  <div class="nav-sep"></div>
+  <button class="nav-arrow" id="navDown" title="К следующему разделу">▼</button>
+</nav>
 
 <header class="top">
   <div class="top-inner">
@@ -339,9 +402,12 @@
       <div id="blocks"></div>
       <div class="actions">
         <button class="btn-ghost add-block" id="addBlockBtn">+ Добавить блок</button>
-        <button class="btn-ghost" id="addChorusAfterBtn">🔁 Добавить припев после блоков</button>
+        <div class="split-menu-wrap">
+          <button class="btn-ghost" id="addChorusAfterBtn">🔁 Добавить припев после блоков</button>
+          <div class="split-menu" id="chorusMenu"></div>
+        </div>
       </div>
-      <p class="hint">«Добавить припев после блоков» вставит копию припева после каждого куплета, бриджа и т.п. — кроме самого припева и блока «end»; если припев уже был разбит на части кнопкой «Разбить», копии сохранят такое же деление. Понимает и нумерованные варианты сокращения — «Пр. 2:», «Пр 2:», «2 Пр.:» — как «Припев 2». Если в песне несколько разных припевов (например, «Припев 1» и «Припев 2» с разным текстом), кнопка не будет гадать, какой из них копировать, и попросит расставить их вручную.</p>
+      <p class="hint">«Добавить припев после блоков» вставит копию припева после каждого куплета, бриджа и т.п. — кроме самого припева и блока «end»; если припев уже был разбит на части кнопкой «Разбить», копии сохранят такое же деление. Понимает и нумерованные варианты сокращения — «Пр. 2:», «Пр 2:», «2 Пр.:» — как «Припев 2». Если в песне несколько разных припевов (например, «Припев» и «Припев 2» с разным текстом), кнопка спросит, какой из них дублировать, и — если у места уже стоит другой припев — добавлять ли туда ещё и этот.</p>
       <p class="hint">Кнопка «⠿ Разбить ▾» появляется у блоков от 3 строк и предлагает разделить их по 2 или по 4 строки (по 4 — только если строк больше четырёх); частям присваиваются имена вида «Припев (2)», «Припев (3)».</p>
 
       <div class="line-limit-panel">
@@ -384,20 +450,23 @@
         <input type="checkbox" id="includeUrlToggle">
         Добавить ссылку на источник в конец текста
       </label>
-      <label class="toggle-row">
-        <input type="checkbox" id="showRepeatsToggle">
-        Показывать знаки повтора (репризы) — //: и :// — в тексте и в блоках выше
-      </label>
-      <label class="toggle-row">
-        <input type="checkbox" id="uppercaseToggle">
-        Превратить весь текст в ЗАГЛАВНЫЕ БУКВЫ
-      </label>
-      <label class="toggle-row">
-        <input type="checkbox" id="wrapLinesToggle">
-        Переносить строки длиннее
-        <input type="text" inputmode="numeric" id="wrapCharsInput" class="num-input" value="40">
-        символов
-      </label>
+      <button type="button" class="extra-toggles-btn" id="extraTogglesBtn">Ещё настройки (3) ▾</button>
+      <div class="extra-toggles" id="extraToggles">
+        <label class="toggle-row">
+          <input type="checkbox" id="showRepeatsToggle">
+          Показывать знаки повтора (репризы) — //: и :// — в тексте и в блоках выше
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" id="uppercaseToggle">
+          Превратить весь текст в ЗАГЛАВНЫЕ БУКВЫ
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" id="wrapLinesToggle">
+          Переносить строки длиннее
+          <input type="text" inputmode="numeric" id="wrapCharsInput" class="num-input" value="40">
+          символов
+        </label>
+      </div>
       <p class="hint" style="margin:-6px 0 16px;">Заглавные буквы и перенос строк меняют только готовый текст ниже (предпросмотр, копирование, файл) — блоки выше остаются как есть, их удобнее редактировать в обычном регистре.</p>
       <div id="previewBox"></div>
       <div class="actions">
@@ -423,7 +492,7 @@
 <footer>
   Локальный инструмент: ничего не уходит на сервер, весь разбор текста происходит в браузере.
   <br>Источник песен — <a href="https://holychords.pro" target="_blank" rel="noopener">holychords.pro</a>.
-  <br><span style="opacity:.6">build 2026-06-20.6 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
+  <br><span style="opacity:.6">build 2026-06-21.1 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
 </footer>
 
 <script>
@@ -438,6 +507,9 @@
   };
   let idSeq = 1;
   const newId = () => 'blk_' + (idSeq++);
+  // Collapse state lives outside `state.blocks` since it's purely a UI
+  // concern, keyed by block id (stable across reordering, unlike index).
+  let collapsedBlockIds = new Set();
 
   /* ---------------- helpers ---------------- */
   const $ = sel => document.querySelector(sel);
@@ -760,6 +832,11 @@
     ta.style.height = (ta.scrollHeight + 2) + 'px';
   }
 
+  function blockPreviewSnippet(block){
+    const firstLine = block.text.split('\n').find(l => l.trim().length > 0) || '';
+    return firstLine.length > 70 ? firstLine.slice(0, 70) + '…' : firstLine;
+  }
+
   function renderBlocks(){
     blocksEl.innerHTML = '';
     if (!state.blocks.length){
@@ -773,6 +850,42 @@
       const card = document.createElement('div');
       card.className = 'block';
       card.dataset.id = block.id;
+
+      const isCollapsed = collapsedBlockIds.has(block.id);
+
+      if (isCollapsed){
+        card.classList.add('collapsed');
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'block-collapsed-row';
+        row.title = 'Развернуть для редактирования';
+
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'block-collapsed-label';
+        labelSpan.textContent = block.label || 'Без названия';
+
+        const previewSpan = document.createElement('span');
+        previewSpan.className = 'block-collapsed-preview';
+        previewSpan.textContent = blockPreviewSnippet(block);
+
+        const lineCount = block.text.split('\n').filter(l => l.trim()).length;
+        const metaSpan = document.createElement('span');
+        metaSpan.className = 'block-collapsed-meta';
+        metaSpan.textContent = lineCount + (lineCount === 1 ? ' строка' : lineCount < 5 ? ' строки' : ' строк');
+
+        const chevron = document.createElement('span');
+        chevron.className = 'block-collapsed-chevron';
+        chevron.textContent = '▾';
+
+        row.append(labelSpan, previewSpan, metaSpan, chevron);
+        row.addEventListener('click', () => {
+          collapsedBlockIds.delete(block.id);
+          renderBlocks();
+        });
+        card.appendChild(row);
+        blocksEl.appendChild(card);
+        return;
+      }
 
       const top = document.createElement('div');
       top.className = 'block-top';
@@ -795,6 +908,10 @@
       const mergeBtn = mkBtn('⤓ Объединить', 'btn-ghost btn-sm', 'Объединить со следующим блоком', () => mergeBlock(idx));
       const dupBtn = mkBtn('⧉', 'btn-ghost btn-icon', 'Дублировать блок', () => duplicateBlock(idx));
       const delBtn = mkBtn('🗑', 'btn-danger btn-icon', 'Удалить блок', () => deleteBlock(idx));
+      const collapseBtn = mkBtn('▴ Свернуть', 'btn-ghost btn-sm block-collapse-toggle', 'Свернуть блок', () => {
+        collapsedBlockIds.add(block.id);
+        renderBlocks();
+      });
 
       if (idx === 0) upBtn.disabled = true;
       if (idx === state.blocks.length - 1){ downBtn.disabled = true; mergeBtn.disabled = true; }
@@ -802,6 +919,7 @@
       controls.append(upBtn, downBtn, splitBtn, mergeBtn, dupBtn, delBtn);
       const linesMenu = buildSplitByLinesControl(idx, block);
       if (linesMenu) controls.appendChild(linesMenu);
+      controls.append(collapseBtn);
       top.append(labelInput, controls);
 
       const ta = document.createElement('textarea');
@@ -1096,13 +1214,12 @@
   function isChorusLabel(label){ return CHORUS_LABEL_RE.test(getLabelBase(label)); }
   function isEndLabel(label){ return END_LABEL_RE.test(getLabelBase(label)); }
 
-  // Finds the chorus and, if it had previously been split into several
-  // blocks via the line-count split menu, the rest of its parts — they sit
-  // right after it and share the same base label (e.g. "Припев", "Припев (2)").
-  function findChorusGroup(){
-    const startIdx = state.blocks.findIndex(b => isChorusLabel(b.label));
+  // Finds a chorus group by its base label (e.g. "Припев", "Припев 2") —
+  // includes any "(2)", "(3)" split-parts that sit right after it, since
+  // those share the same base and were produced by the line-split tool.
+  function findChorusGroupByBase(base){
+    const startIdx = state.blocks.findIndex(b => isChorusLabel(b.label) && getLabelBase(b.label) === base);
     if (startIdx === -1) return null;
-    const base = getLabelBase(state.blocks[startIdx].label);
     let endIdx = startIdx;
     while (
       endIdx + 1 < state.blocks.length &&
@@ -1129,14 +1246,12 @@
     return seen;
   }
 
-  function insertChorusAfterBlocks(){
-    const variants = getChorusVariantBases();
-    if (variants.length > 1){
-      toast('В песне несколько разных припевов (' + variants.join(', ') + ') — расставьте копии вручную, авто-вставка работает только когда припев один');
-      return;
-    }
-    const chorusGroup = findChorusGroup();
-    if (!chorusGroup){ toast('Не нашёл блок «Припев» — переименуйте нужный блок, чтобы я его узнал'); return; }
+  // fillOverOtherVariant: false = only insert after blocks not already
+  // followed by ANY chorus variant; true = insert after every qualifying
+  // block regardless of what (if any) chorus variant already follows it.
+  function runChorusInsert(variantBase, fillOverOtherVariant){
+    const chorusGroup = findChorusGroupByBase(variantBase);
+    if (!chorusGroup){ toast('Не нашёл блок «' + variantBase + '»'); return; }
 
     const result = [];
     for (let i = 0; i < state.blocks.length; i++){
@@ -1144,8 +1259,11 @@
       result.push(b);
       const isChorus = isChorusLabel(b.label);
       const isEnd = isEndLabel(b.label);
-      const nextIsChorus = (i + 1 < state.blocks.length) && isChorusLabel(state.blocks[i + 1].label);
-      if (!isChorus && !isEnd && !nextIsChorus){
+      const next = state.blocks[i + 1];
+      const nextIsSameVariant = next && getLabelBase(next.label) === variantBase && isChorusLabel(next.label);
+      const nextIsAnyChorus = next && isChorusLabel(next.label);
+      const skip = isChorus || isEnd || nextIsSameVariant || (!fillOverOtherVariant && nextIsAnyChorus);
+      if (!skip){
         for (const cb of chorusGroup){
           result.push({ id: newId(), label: cb.label, text: cb.text });
         }
@@ -1153,7 +1271,54 @@
     }
     state.blocks = result;
     renderBlocks(); renderPreview();
-    toast('Припев добавлен после куплетов и других блоков');
+    toast('«' + variantBase + '» добавлен после нужных блоков');
+  }
+
+  function closeChorusMenu(){ $('#chorusMenu').classList.remove('open'); }
+
+  function renderChorusVariantStep(variants){
+    const menu = $('#chorusMenu');
+    menu.innerHTML = '';
+    const heading = document.createElement('div');
+    heading.className = 'split-menu-heading';
+    heading.textContent = 'Какой припев продублировать?';
+    menu.appendChild(heading);
+    variants.forEach(v => {
+      menu.appendChild(mkMenuItem(v, () => renderChorusFillStep(v, variants)));
+    });
+  }
+
+  function renderChorusFillStep(variant, variants){
+    const menu = $('#chorusMenu');
+    menu.innerHTML = '';
+    const heading = document.createElement('div');
+    heading.className = 'split-menu-heading';
+    heading.textContent = 'Если место уже занято другим припевом — добавить туда и «' + variant + '»?';
+    menu.appendChild(heading);
+    menu.appendChild(mkMenuItem('Нет, только где сейчас нет ни одного припева', () => {
+      runChorusInsert(variant, false);
+      closeChorusMenu();
+    }));
+    menu.appendChild(mkMenuItem('Да, добавить туда тоже', () => {
+      runChorusInsert(variant, true);
+      closeChorusMenu();
+    }));
+    const back = mkMenuItem('← Назад', () => renderChorusVariantStep(variants));
+    back.classList.add('split-menu-back');
+    menu.appendChild(back);
+  }
+
+  function insertChorusAfterBlocks(){
+    const variants = getChorusVariantBases();
+    if (!variants.length){ toast('Не нашёл блок «Припев» — переименуйте нужный блок, чтобы я его узнал'); return; }
+    if (variants.length === 1){
+      runChorusInsert(variants[0], false);
+      return;
+    }
+    const menu = $('#chorusMenu');
+    const willOpen = !menu.classList.contains('open');
+    closeAllSplitMenus();
+    if (willOpen){ renderChorusVariantStep(variants); menu.classList.add('open'); }
   }
 
   /* ---------------- preview / export ---------------- */
@@ -1185,7 +1350,7 @@
       const bodyText = showRepeats ? b.text : stripRepeatMarks(b.text);
       if (!bodyText.trim()) continue;
       const formattedBody = fmt(bodyText);
-      parts.push(showLabels && b.label ? ('[' + b.label + ']\n' + formattedBody) : formattedBody);
+      parts.push(showLabels && b.label ? (b.label + '\n' + formattedBody) : formattedBody);
     }
     let out = parts.join('\n\n').trim();
     if (uppercaseToggle.checked) out = out.toUpperCase();
@@ -1233,10 +1398,16 @@
       if (max) state.blocks = applyLineLimitToBlocks(state.blocks, max);
     }
 
+    // Collapsed by default except the first block, which stays open as a
+    // demonstration of the editing controls — expand the rest only if the
+    // final preview below doesn't look right.
+    collapsedBlockIds = new Set(state.blocks.slice(1).map(b => b.id));
+
     $('#step-blocks').classList.remove('hidden');
     syncExportVisibility();
     renderBlocks();
     renderPreview();
+    refreshSideNav();
 
     if (state.url){
       const ok = await copyText(state.url);
@@ -1278,6 +1449,12 @@
   wrapLinesToggle.addEventListener('change', renderPreview);
   wrapCharsInput.addEventListener('input', () => { if (wrapLinesToggle.checked) renderPreview(); });
 
+  $('#extraTogglesBtn').addEventListener('click', () => {
+    const panel = $('#extraToggles');
+    const open = panel.classList.toggle('open');
+    $('#extraTogglesBtn').textContent = open ? 'Ещё настройки (3) ▴' : 'Ещё настройки (3) ▾';
+  });
+
   $('#copyBtn').addEventListener('click', async () => {
     const ok = await copyText(assembleText());
     toast(ok ? 'Текст скопирован в буфер обмена' : 'Не удалось скопировать — попробуйте выделить текст вручную');
@@ -1294,6 +1471,57 @@
     const ok = await copyText(state.url);
     toast(ok ? 'Ссылка скопирована' : 'Не удалось скопировать ссылку');
   });
+
+  /* ---------------- side nav ---------------- */
+  function setupSideNav(){
+    const numButtons = Array.from(document.querySelectorAll('.side-nav .nav-num'));
+    const sectionEls = numButtons.map(b => document.getElementById(b.dataset.target));
+
+    function visibleSections(){
+      return sectionEls.filter(el => el && !el.classList.contains('hidden'));
+    }
+    function scrollToSection(el){
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    numButtons.forEach((btn, i) => {
+      btn.addEventListener('click', () => scrollToSection(sectionEls[i]));
+    });
+
+    function currentIndexAmongVisible(){
+      const vis = visibleSections();
+      let current = vis[0];
+      for (const el of vis){
+        if (el.getBoundingClientRect().top <= 130) current = el;
+      }
+      return vis.indexOf(current);
+    }
+
+    $('#navUp').addEventListener('click', () => {
+      const vis = visibleSections();
+      const idx = currentIndexAmongVisible();
+      scrollToSection(vis[Math.max(0, idx - 1)]);
+    });
+    $('#navDown').addEventListener('click', () => {
+      const vis = visibleSections();
+      const idx = currentIndexAmongVisible();
+      scrollToSection(vis[Math.min(vis.length - 1, idx + 1)]);
+    });
+
+    function refresh(){
+      sectionEls.forEach((el, i) => {
+        numButtons[i].classList.toggle('disabled', !(el && !el.classList.contains('hidden')));
+      });
+      const vis = visibleSections();
+      const activeEl = vis[currentIndexAmongVisible()];
+      sectionEls.forEach((el, i) => numButtons[i].classList.toggle('active', el === activeEl));
+    }
+
+    window.addEventListener('scroll', refresh, { passive: true });
+    window.addEventListener('resize', refresh);
+    refresh();
+    return refresh;
+  }
+  const refreshSideNav = setupSideNav();
 
   /* ---------------- init ---------------- */
   loadLineLimitPref();
