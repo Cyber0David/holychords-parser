@@ -187,6 +187,33 @@
   }
   .blocks-tray-count{font:600 12px/1 'Inter';color:var(--ink-soft);flex:1;}
 
+  /* Tray mode: entire #blocks list shrinks to compact rows, actions stay below */
+  #blocks.tray-mode .block{padding:0; border-radius:var(--radius);}
+  #blocks.tray-mode .block .block-top,
+  #blocks.tray-mode .block textarea{display:none;}
+  #blocks.tray-mode .block .tray-row{display:flex !important;}
+
+  /* The compact tray row — shown only when the whole list is in tray mode */
+  .tray-row{
+    display:none; /* hidden by default, shown only in tray mode */
+    align-items:center;gap:10px;width:100%;
+    padding:12px 14px;cursor:pointer;
+    background:transparent;border:none;border-radius:var(--radius);
+    text-align:left;font-family:'Inter';
+  }
+  .tray-row:hover{background:var(--paper-deep);}
+  .tray-label{
+    font:600 13.5px 'Inter';color:var(--accent-ink);flex:0 0 auto;
+    background:var(--paper);border:1px solid var(--line);border-radius:8px;
+    padding:5px 9px;white-space:nowrap;
+  }
+  .tray-preview{
+    flex:1 1 auto;min-width:0;color:var(--ink-soft);font-size:13px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .tray-meta{flex:0 0 auto;color:var(--ink-soft);font-size:12px;white-space:nowrap;}
+  .tray-chevron{flex:0 0 auto;color:var(--ink-soft);font-size:11px;opacity:.6;}
+
   /* ---------- global line-limit panel ---------- */
   .line-limit-panel{
     margin-top:16px;background:var(--paper-deep);border:1px solid var(--line);
@@ -281,22 +308,11 @@
   @media (max-width:1180px){ .side-nav{display:none;} }
 
   /* ---------- collapsible block cards ---------- */
-  .block.collapsed{padding:0;}
-  .block-collapsed-row{
-    display:flex;align-items:center;gap:12px;width:100%;
-    background:transparent;border:none;border-radius:var(--radius);
-    padding:14px 16px;text-align:left;font-family:'Inter';
-  }
-  .block-collapsed-label{
-    font:600 14px 'Inter';color:var(--accent-ink);flex:0 0 auto;
-    background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:6px 10px;
-  }
-  .block-collapsed-preview{
-    flex:1 1 auto;min-width:0;color:var(--ink-soft);font-size:13.5px;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  }
-  .block-collapsed-meta{flex:0 0 auto;color:var(--ink-soft);font-size:12px;}
-  .block-collapsed-chevron{flex:0 0 auto;color:var(--ink-soft);font-size:13px;}
+  /* individual "Свернуть" button still available per-block (collapses to tray row) */
+  .block.ind-collapsed{padding:0;}
+  .block.ind-collapsed .block-top,
+  .block.ind-collapsed textarea{display:none;}
+  .block.ind-collapsed .tray-row{display:flex !important;}
   .block-collapse-toggle{margin-left:auto;}
 
   /* ---------- collapsible extra export toggles ---------- */
@@ -353,13 +369,13 @@
       <div class="tile">1</div>
       <div>
         <h2>Найдите песню</h2>
-        <p>Поиск открывает результаты прямо на holychords.pro в новой вкладке — там удобнее всего выбрать нужную версию песни.</p>
+        <p>Поиск открывает Google с запросом «holychords [название песни]» — выберите нужный результат и скопируйте текст и ссылку оттуда. Работает на любых устройствах и браузерах.</p>
       </div>
     </div>
     <div class="step-body">
       <div class="search-row">
         <input type="text" id="searchInput" placeholder="Название песни или исполнитель…" autocomplete="off">
-        <button class="btn-primary" id="searchBtn">Искать на holychords.pro</button>
+        <button class="btn-primary" id="searchBtn">🔍 Найти через Google</button>
       </div>
       <p class="hint">Откроется holychords.pro/search — скопируйте оттуда текст нужной песни и ссылку на неё, затем вернитесь сюда.</p>
     </div>
@@ -411,9 +427,10 @@
         <span class="blocks-tray-count" id="blocksTrayCount"></span>
         <button class="btn-ghost btn-sm" id="expandAllBtn">Развернуть все</button>
         <button class="btn-ghost btn-sm" id="collapseAllBtn">Свернуть все</button>
+        <button class="btn-primary btn-sm" id="trayToggleBtn">☰ Свернуть в трэй</button>
       </div>
       <div id="blocks"></div>
-      <div class="actions">
+      <div class="actions" id="blockActions">
         <button class="btn-ghost add-block" id="addBlockBtn">+ Добавить блок</button>
         <div class="split-menu-wrap">
           <button class="btn-ghost" id="addChorusAfterBtn">🔁 Добавить припев после блоков</button>
@@ -505,7 +522,7 @@
 <footer>
   Локальный инструмент: ничего не уходит на сервер, весь разбор текста происходит в браузере.
   <br>Источник песен — <a href="https://holychords.pro" target="_blank" rel="noopener">holychords.pro</a>.
-  <br><span style="opacity:.6">build 2026-06-22.1 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
+  <br><span style="opacity:.6">build 2026-06-22.2 — если в подвале не такая метка, у вас открыта не последняя версия страницы.</span>
 </footer>
 
 <script>
@@ -860,16 +877,31 @@
     ta.style.height = (ta.scrollHeight + 2) + 'px';
   }
 
+  function escHtml(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
   function blockPreviewSnippet(block){
     const firstLine = block.text.split('\n').find(l => l.trim().length > 0) || '';
     return firstLine.length > 70 ? firstLine.slice(0, 70) + '…' : firstLine;
   }
+
+  // true = the whole block list is in compact tray mode
+  let trayMode = false;
 
   function renderBlocks(){
     // Update tray bar count
     const n = state.blocks.length;
     const countEl = $('#blocksTrayCount');
     if (countEl) countEl.textContent = n + ' ' + (n === 1 ? 'блок' : n < 5 ? 'блока' : 'блоков');
+
+    // Keep / restore tray mode class on the container
+    if (trayMode) blocksEl.classList.add('tray-mode');
+    else blocksEl.classList.remove('tray-mode');
+
+    // Update tray toggle button label
+    const trayBtn = $('#trayToggleBtn');
+    if (trayBtn) trayBtn.textContent = trayMode ? '☱ Развернуть блоки' : '☰ Свернуть в трэй';
 
     blocksEl.innerHTML = '';
     if (!state.blocks.length){
@@ -879,47 +911,40 @@
       blocksEl.appendChild(empty);
       return;
     }
+
     state.blocks.forEach((block, idx) => {
       const card = document.createElement('div');
       card.className = 'block';
       card.dataset.id = block.id;
 
-      const isCollapsed = collapsedBlockIds.has(block.id);
+      const isIndCollapsed = collapsedBlockIds.has(block.id);
+      if (isIndCollapsed) card.classList.add('ind-collapsed');
 
-      if (isCollapsed){
-        card.classList.add('collapsed');
-        const row = document.createElement('button');
-        row.type = 'button';
-        row.className = 'block-collapsed-row';
-        row.title = 'Развернуть для редактирования';
-
-        const labelSpan = document.createElement('span');
-        labelSpan.className = 'block-collapsed-label';
-        labelSpan.textContent = block.label || 'Без названия';
-
-        const previewSpan = document.createElement('span');
-        previewSpan.className = 'block-collapsed-preview';
-        previewSpan.textContent = blockPreviewSnippet(block);
-
-        const lineCount = block.text.split('\n').filter(l => l.trim()).length;
-        const metaSpan = document.createElement('span');
-        metaSpan.className = 'block-collapsed-meta';
-        metaSpan.textContent = lineCount + (lineCount === 1 ? ' строка' : lineCount < 5 ? ' строки' : ' строк');
-
-        const chevron = document.createElement('span');
-        chevron.className = 'block-collapsed-chevron';
-        chevron.textContent = '▾';
-
-        row.append(labelSpan, previewSpan, metaSpan, chevron);
-        row.addEventListener('click', () => {
+      // --- Compact tray row (visible in tray-mode OR when individually collapsed) ---
+      const lineCount = block.text.split('\n').filter(l => l.trim()).length;
+      const trayRow = document.createElement('div');
+      trayRow.className = 'tray-row';
+      trayRow.title = 'Нажмите, чтобы развернуть этот блок';
+      trayRow.innerHTML = `
+        <span class="tray-label">${escHtml(block.label || 'Без названия')}</span>
+        <span class="tray-preview">${escHtml(blockPreviewSnippet(block))}</span>
+        <span class="tray-meta">${lineCount}&thinsp;${lineCount === 1 ? 'строка' : lineCount < 5 ? 'строки' : 'строк'}</span>
+        <span class="tray-chevron">▾</span>
+      `;
+      trayRow.addEventListener('click', () => {
+        if (trayMode){
+          // In tray mode a click expands just this one block (exits tray for it)
+          trayMode = false;
+          collapsedBlockIds.clear();
+          renderBlocks();
+        } else {
+          // Individually collapsed — just expand this one
           collapsedBlockIds.delete(block.id);
           renderBlocks();
-        });
-        card.appendChild(row);
-        blocksEl.appendChild(card);
-        return;
-      }
+        }
+      });
 
+      // --- Full expanded card ---
       const top = document.createElement('div');
       top.className = 'block-top';
 
@@ -929,6 +954,8 @@
       labelInput.value = block.label;
       labelInput.addEventListener('input', () => {
         block.label = labelInput.value;
+        // also update tray-label in same card without full re-render
+        trayRow.querySelector('.tray-label').textContent = labelInput.value || 'Без названия';
         renderPreview();
       });
 
@@ -964,7 +991,7 @@
         renderPreview();
       });
 
-      card.append(top, ta);
+      card.append(trayRow, top, ta);
       blocksEl.appendChild(card);
       requestAnimationFrame(() => autosize(ta));
     });
@@ -1450,7 +1477,10 @@
   function doSearch(){
     const q = $('#searchInput').value.trim();
     if (!q){ toast('Введите название песни'); return; }
-    window.open('https://holychords.pro/search?name=' + encodeURIComponent(q), '_blank', 'noopener');
+    // Search via the browser's default search engine with "holychords" prepended
+    // so the user lands on proper search results even on older devices that can't
+    // load holychords.pro's own search page directly.
+    window.open('https://www.google.com/search?q=' + encodeURIComponent('holychords ' + q), '_blank', 'noopener');
   }
 
   /* ---------------- step 2: paste & process ---------------- */
@@ -1483,9 +1513,10 @@
       // runChorusInsert already sets state.chorusDuplicated = true
     }
 
-    // All blocks collapsed into the tray, first block expanded as an
-    // editing-controls demo.
-    collapsedBlockIds = new Set(state.blocks.slice(1).map(b => b.id));
+    // All blocks fully expanded by default — the user can use "Свернуть в трэй"
+    // to get the compact view or "▴ Свернуть" on individual blocks.
+    trayMode = false;
+    collapsedBlockIds = new Set();
 
     $('#step-blocks').classList.remove('hidden');
     syncExportVisibility();
@@ -1526,11 +1557,19 @@
   // Seed the initial state so it shows the right label from the start.
   updateChorusBtn();
 
+  $('#trayToggleBtn').addEventListener('click', () => {
+    trayMode = !trayMode;
+    collapsedBlockIds.clear(); // individual collapses reset when toggling tray
+    renderBlocks();
+  });
+
   $('#expandAllBtn').addEventListener('click', () => {
+    trayMode = false;
     collapsedBlockIds.clear();
     renderBlocks();
   });
   $('#collapseAllBtn').addEventListener('click', () => {
+    trayMode = false;
     collapsedBlockIds = new Set(state.blocks.map(b => b.id));
     renderBlocks();
   });
