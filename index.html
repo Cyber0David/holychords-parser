@@ -967,6 +967,10 @@
       const splitBtn = mkBtn('✂ Разделить', 'btn-ghost btn-sm', 'Разделить по позиции курсора', () => splitBlock(idx));
       const mergeBtn = mkBtn('⤓ Объединить', 'btn-ghost btn-sm', 'Объединить со следующим блоком', () => mergeBlock(idx));
       const dupBtn = mkBtn('⧉', 'btn-ghost btn-icon', 'Дублировать блок', () => duplicateBlock(idx));
+      const copyBlockBtn = mkBtn('📋', 'btn-ghost btn-icon', 'Скопировать текст блока', async () => {
+        const ok = await copyText(block.text.trim());
+        toast(ok ? 'Текст блока скопирован' : 'Не удалось скопировать — скопируйте вручную');
+      });
       const delBtn = mkBtn('🗑', 'btn-danger btn-icon', 'Удалить блок', () => deleteBlock(idx));
       const collapseBtn = mkBtn('▴ Свернуть', 'btn-ghost btn-sm block-collapse-toggle', 'Свернуть блок', () => {
         collapsedBlockIds.add(block.id);
@@ -976,7 +980,7 @@
       if (idx === 0) upBtn.disabled = true;
       if (idx === state.blocks.length - 1){ downBtn.disabled = true; mergeBtn.disabled = true; }
 
-      controls.append(upBtn, downBtn, splitBtn, mergeBtn, dupBtn, delBtn);
+      controls.append(upBtn, downBtn, splitBtn, mergeBtn, dupBtn, copyBlockBtn, delBtn);
       const linesMenu = buildSplitByLinesControl(idx, block);
       if (linesMenu) controls.appendChild(linesMenu);
       controls.append(collapseBtn);
