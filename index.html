@@ -1502,6 +1502,22 @@
     const withoutFooter = stripFooterAfterSeparator(withoutUrl);
     const cleaned = stripChords(withoutFooter);
     state.blocks = splitIntoBlocks(cleaned);
+
+    // If the user hasn't typed a title manually and the very first block looks
+    // like a song title — a single non-empty line with a generic or no label —
+    // move it into the title field and drop it from the block list. This covers
+    // the holychords.pro format where the song name sits as the first "Блок 1".
+    const manualTitle = $('#titleInput').value.trim();
+    if (!manualTitle && state.blocks.length > 0){
+      const first = state.blocks[0];
+      const firstLines = first.text.split('\n').filter(l => l.trim().length > 0);
+      const isGenericLabel = /^блок\s*\d*$/i.test((first.label || '').trim());
+      if (firstLines.length === 1 && isGenericLabel){
+        $('#titleInput').value = firstLines[0].trim();
+        state.title = firstLines[0].trim();
+        state.blocks.shift();
+      }
+    }
     if ($('#lineLimitAutoToggle').checked){
       const max = getLineLimitMax();
       if (max) state.blocks = applyLineLimitToBlocks(state.blocks, max);
